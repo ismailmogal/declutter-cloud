@@ -1,3 +1,15 @@
-backend/
-frontend/
+backend/__pycache__
+backend/database.db
+backend/.env
+backend/venv/ 
+frontend/.env
+frontend/node_modules
+frontend/dist
+frontend/build
+frontend/public/static
+frontend/public/media
+frontend/public/robots.txt
+frontend/public/favicon.ico
+frontend/public/robots.txt
 shared/
+venv/ 
