@@ -1,0 +1,95 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.5, pytest-8.4.1, pluggy-1.6.0 -- /Users/ismogal/declutter-cloud/backend/venv/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/ismogal/declutter-cloud/backend
+plugins: anyio-3.7.1
+collecting ... collected 10 items
+
+tests/test_onedrive.py::test_onedrive_login_endpoint PASSED              [ 10%]
+tests/test_onedrive.py::test_onedrive_login_requires_auth PASSED         [ 20%]
+tests/test_onedrive.py::test_get_onedrive_files PASSED                   [ 30%]
+tests/test_onedrive.py::test_get_onedrive_files_error_handling PASSED    [ 40%]
+tests/test_onedrive.py::test_get_onedrive_files_no_connection PASSED     [ 50%]
+tests/test_onedrive.py::test_token_refresh FAILED                        [ 60%]
+tests/test_onedrive.py::test_recursive_files_endpoint PASSED             [ 70%]
+tests/test_onedrive.py::test_start_scan_job_and_status PASSED            [ 80%]
+tests/test_onedrive.py::test_scan_job_cancellation_and_progress PASSED   [ 90%]
+tests/test_onedrive.py::test_scan_job_progress_and_error_fields PASSED   [100%]
+
+=================================== FAILURES ===================================
+______________________________ test_token_refresh ______________________________
+
+mock_api_request = <MagicMock name='_make_graph_api_request' id='4394533616'>
+mock_refresh = <MagicMock name='refresh_onedrive_token' id='4394535968'>
+client = <starlette.testclient.TestClient object at 0x105fa1370>
+user_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzUxMzkwNzA5fQ.2dfx5HnWFY-7KfDJyiyYn5Do2pgJcdUhocsVPWi9LL8'
+db_session = <sqlalchemy.orm.session.Session object at 0x105f0b980>
+test_user = <models.User object at 0x105fa0710>
+
+    @patch('onedrive_api.refresh_onedrive_token')
+    @patch('onedrive_api._make_graph_api_request')
+    def test_token_refresh(mock_api_request, mock_refresh, client, user_token, db_session, test_user):
+        # Simulate _make_graph_api_request returning 401 first, then 200
+        call_count = {'n': 0}
+        class MockResponse:
+            def __init__(self, status_code):
+                self.status_code = status_code
+            def json(self):
+                return {"value": []}
+            @property
+            def text(self):
+                return "mock error"
+        def side_effect(*args, **kwargs):
+            if call_count['n'] == 0:
+                call_count['n'] += 1
+                return MockResponse(401)
+            return MockResponse(200)
+        mock_api_request.side_effect = side_effect
+        mock_refresh.return_value = None
+        # Create a mock OneDrive connection with expired token for the test user
+        from models import CloudConnection
+        connection = CloudConnection()
+        connection.user_id = test_user.id
+        connection.provider = "onedrive"
+        connection.access_token = "expired_token"
+        connection.refresh_token = "old_refresh_token"
+        connection.provider_user_id = "user1"
+        connection.provider_user_email = "test@example.com"
+        connection.is_active = True
+        db_session.add(connection)
+        db_session.commit()
+        # This should trigger a token refresh
+        response = client.get("/api/onedrive/files", headers={"Authorization": f"Bearer {user_token}"})
+        # Verify token refresh was attempted
+>       assert mock_refresh.called
+E       AssertionError: assert False
+E        +  where False = <MagicMock name='refresh_onedrive_token' id='4394535968'>.called
+
+tests/test_onedrive.py:142: AssertionError
+----------------------------- Captured stdout call -----------------------------
+[DEBUG] Getting OneDrive files for user 1, folder_id: None
+[DEBUG] get_onedrive_files_service: user_id=1, folder_id=None
+[DEBUG] Error retrieving files: 401: Failed to fetch folder contents: mock error
+=============================== warnings summary ===============================
+database.py:23
+  /Users/ismogal/declutter-cloud/backend/database.py:23: MovedIn20Warning: Deprecated API features detected! These feature(s) are not compatible with SQLAlchemy 2.0. To prevent incompatible upgrades prior to updating applications, ensure requirements files are pinned to "sqlalchemy<2.0". Set environment variable SQLALCHEMY_WARN_20=1 to show all deprecation warnings.  Set environment variable SQLALCHEMY_SILENCE_UBER_WARNING=1 to silence this message. (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+venv/lib/python3.13/site-packages/pydantic/_internal/_config.py:323
+venv/lib/python3.13/site-packages/pydantic/_internal/_config.py:323
+  /Users/ismogal/declutter-cloud/backend/venv/lib/python3.13/site-packages/pydantic/_internal/_config.py:323: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+venv/lib/python3.13/site-packages/pydantic/_internal/_config.py:373
+  /Users/ismogal/declutter-cloud/backend/venv/lib/python3.13/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+  * 'orm_mode' has been renamed to 'from_attributes'
+    warnings.warn(message, UserWarning)
+
+tests/test_onedrive.py::test_onedrive_login_endpoint
+  /Users/ismogal/declutter-cloud/backend/venv/lib/python3.13/site-packages/jose/jwt.py:311: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = timegm(datetime.utcnow().utctimetuple())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_onedrive.py::test_token_refresh - AssertionError: assert False
+=================== 1 failed, 9 passed, 5 warnings in 2.81s ====================
