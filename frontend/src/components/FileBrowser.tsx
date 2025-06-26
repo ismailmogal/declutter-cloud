@@ -41,6 +41,7 @@ import {
   PlaylistAdd,
   Close
 } from '@mui/icons-material';
+import CrossCloudActions from './CrossCloudActions';
 
 interface FileItem {
   id: string;
@@ -51,6 +52,7 @@ interface FileItem {
   path: string;
   duplicate_count?: number;
   suggestion?: string;
+  tags?: string;
 }
 
 interface FileBrowserProps {
@@ -64,6 +66,8 @@ interface FileBrowserProps {
   onBreadcrumbClick: (crumb: { id: string; name: string; path: string }) => void;
   onRefresh: () => void;
   onAddFoldersToCompare: (folders: FileItem[]) => void;
+  renderFileTags?: (file: FileItem) => React.ReactNode;
+  renderCrossCloudActions?: (file: FileItem) => React.ReactNode;
 }
 
 const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -75,7 +79,9 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   onFolderClick,
   onBreadcrumbClick,
   onRefresh,
-  onAddFoldersToCompare
+  onAddFoldersToCompare,
+  renderFileTags,
+  renderCrossCloudActions
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -330,7 +336,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredAndSortedFiles.map((file) => {
+                {filteredAndSortedFiles.map((file: FileItem) => {
                   const isItemSelected = isSelected(file.id);
                   return (
                     <TableRow
@@ -371,7 +377,12 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
                       </TableCell>
                       <TableCell>{formatDate(file.last_modified)}</TableCell>
                       <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell><IconButton><MoreVert/></IconButton></TableCell>
+                      <TableCell>
+                        {renderFileTags && renderFileTags(file)}
+                      </TableCell>
+                      <TableCell>
+                        {renderCrossCloudActions && renderCrossCloudActions(file)}
+                      </TableCell>
                     </TableRow>
                   )
                 })}

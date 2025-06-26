@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FC, Dispatch, SetStateAction } from 'react';
 import { Alert, Box, Paper, Typography, Button, Chip, CircularProgress, Tooltip, Slider, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions, IconButton } from '@mui/material';
 import FileBrowser from '../components/FileBrowser';
@@ -7,6 +7,22 @@ import ErrorIcon from '@mui/icons-material/Error';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useFolderScan } from '../hooks/useFolderScan';
+import TagFilterBar from '../components/TagFilterBar';
+import FileTags from '../components/FileTags';
+import { searchFilesByTags, getTags } from '../api/files';
+import { moveFileToCloud, copyFileToCloud } from '../api/cloud';
+import CrossCloudActions from '../components/CrossCloudActions';
+
+interface FileItem {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  size?: number;
+  last_modified?: string;
+  path: string;
+  tags?: string;
+  // Add any other fields as needed
+}
 
 interface MyFilesProps {
   user: any;
@@ -30,6 +46,9 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
   const [batchWarning, setBatchWarning] = useState<{ folder: any, estimated: number } | null>(null);
   const [proceedBatch, setProceedBatch] = useState(false);
   const FILE_WARN_THRESHOLD = 1000;
+  const [tags, setTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [filteredFiles, setFilteredFiles] = useState<FileItem[]>(files);
 
   const {
     scanFolder,
@@ -41,6 +60,18 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
     filesFound,
     cancelScan
   } = useFolderScan(user?.id || '');
+
+  useEffect(() => {
+    getTags().then(data => setTags(data.tags || []));
+  }, []);
+
+  useEffect(() => {
+    if (selectedTags.length > 0) {
+      searchFilesByTags(selectedTags.join(',')).then(setFilteredFiles);
+    } else {
+      setFilteredFiles(files);
+    }
+  }, [selectedTags, files]);
 
   const fetchAllFilesRecursive = async (folderId: string, token: string, maxDepth: number, currentDepth = 0, progressCb?: (current: number, total: number) => void): Promise<any[]> => {
     const headers = { 'Authorization': `Bearer ${token}` };
@@ -241,8 +272,9 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         </Paper>
       )}
       {error && <Alert severity="error">{error}</Alert>}
+      <TagFilterBar tags={tags} selectedTags={selectedTags} onChange={setSelectedTags} />
       <FileBrowser
-        files={files}
+        files={filteredFiles}
         loading={loading}
         error={error}
         onAddFoldersToCompare={handleStageFolders}
@@ -252,6 +284,16 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         onFileClick={()=>{}}
         onRefresh={onRefresh}
         currentPath=""
+        renderFileTags={(file: FileItem) => <FileTags tags={file.tags ? file.tags.split(',') : []} />}
+        // renderCrossCloudActions is disabled for now
+        // renderCrossCloudActions={(file: FileItem) => (
+        //   <CrossCloudActions
+        //     fileId={Number(file.id)}
+        //     availableClouds={['onedrive', 'googledrive']}
+        //     onMove={(targetCloud: string) => moveFileToCloud(Number(file.id), targetCloud)}
+        //     onCopy={(targetCloud: string) => copyFileToCloud(Number(file.id), targetCloud)}
+        //   />
+        // )}
       />
       {/* Progress bar and batch warning dialog */}
       {batchProgress && (

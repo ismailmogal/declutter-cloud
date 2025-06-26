@@ -15,7 +15,7 @@ class CloudConnectionSchema(BaseModel):
     is_active: bool = True
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserSchema(BaseModel):
     id: int
@@ -25,7 +25,7 @@ class UserSchema(BaseModel):
     cloud_connections: List[CloudConnectionSchema] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # SQLAlchemy Models
 class User(Base):
@@ -73,4 +73,22 @@ class Session(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
-    user = relationship("User", back_populates="sessions") 
+    user = relationship("User", back_populates="sessions")
+
+class File(Base):
+    __tablename__ = "files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cloud_id = Column(String, nullable=False)  # ID from the cloud provider
+    provider = Column(String, nullable=False)  # onedrive, googledrive, etc.
+    name = Column(String, nullable=False)
+    size = Column(Integer, nullable=True)
+    last_modified = Column(DateTime(timezone=True), nullable=True)
+    last_accessed = Column(DateTime(timezone=True), nullable=True)
+    tags = Column(String, nullable=True)  # Comma-separated tags or JSON string
+    extra = Column(Text, nullable=True)  # For additional metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User") 
