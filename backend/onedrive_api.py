@@ -120,7 +120,7 @@ def get_all_files_recursively(connection: CloudConnection, db: Session, folder_i
     Fetches a flat list of all files from the specified folders using the delta endpoint.
     """
     all_files = []
-    select_fields = "id,name,size,file,parentReference,deleted"
+    select_fields = "id,name,size,file,parentReference,deleted,lastModifiedDateTime"
 
     for folder_id in folder_ids:
         delta_url = f"{GRAPH_API_BASE_URL}/me/drive/items/{folder_id}/delta?select={select_fields}"
@@ -141,7 +141,8 @@ def get_all_files_recursively(connection: CloudConnection, db: Session, folder_i
                         "name": item["name"],
                         "size": item.get("size", 0),
                         "hash": item.get("file", {}).get("hashes", {}).get("quickXorHash"),
-                        "path": item.get("parentReference", {}).get("path")
+                        "path": item.get("parentReference", {}).get("path"),
+                        "last_modified": item.get("lastModifiedDateTime")
                     })
 
             delta_url = data.get("@odata.nextLink")
