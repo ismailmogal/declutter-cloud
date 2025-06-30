@@ -15,7 +15,10 @@ backend/alembic/
 
 # Environment & config
 backend/.env
+backend/.env.production
 frontend/.env
+frontend/.env.production
+
 
 # Database
 backend/database.db
