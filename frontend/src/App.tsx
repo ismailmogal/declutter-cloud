@@ -31,11 +31,14 @@ import Support from './components/Support';
 import Help from './components/Help';
 import Modal from '@mui/material/Modal';
 import SettingsIcon from '@mui/icons-material/Settings';
+import Logo from './components/Logo';
+import apiClient from './api/api';
 
 // Page Components
 import MyFiles from './pages/MyFiles';
 import Compare from './pages/Compare';
 import SmartOrganiser from './pages/SmartOrganiser';
+import HomePage from './pages/HomePage';
 
 const sections = [
   'My Files',
@@ -95,31 +98,17 @@ function App() {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
-      const userResponse = await fetch('/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!userResponse.ok) {
-        throw new Error('Failed to fetch user profile.');
-      }
+      const userResponse = await apiClient.get('/auth/me');
+      if (userResponse.status !== 200) throw new Error('Failed to fetch user profile.');
       
-      const userData = await userResponse.json();
-
-      const connectionsResponse = await fetch('/api/cloud/connections', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      const connectionsData = connectionsResponse.ok ? await connectionsResponse.json() : [];
+      const connectionsResponse = await apiClient.get('/api/cloud/connections');
       
-      setUser({ ...userData, connections: connectionsData });
-
+      setUser({ ...userResponse.data, connections: connectionsResponse.data || [] });
     } catch (err: any) {
-      setError(err.message || 'An error occurred.');
+      setError(err.response?.data?.detail || err.message || 'An error occurred.');
       setUser(null);
       localStorage.removeItem('token');
     } finally {
@@ -133,17 +122,12 @@ function App() {
 
   useEffect(() => {
     const fetchFiles = async () => {
-      if (!user?.cloud_connections?.some((conn: any) => conn.provider === 'onedrive' && conn.is_active)) {
+      if (!user?.connections?.some((conn: any) => conn.provider === 'onedrive' && conn.is_active)) {
         return;
       }
       setDataLoading(true);
       setError(null);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError("Authentication token not found.");
-        setDataLoading(false);
-        return;
-      }
+      
       try {
         const folderId = currentFolder?.id || 'root';
         let filesData: any[] = [];
@@ -151,17 +135,16 @@ function App() {
           filesData = await getCachedFiles(folderId);
         }
         if (forceRefresh || !filesData || filesData.length === 0) {
-          const headers = { 'Authorization': `Bearer ${token}` };
-          const filesResponse = await fetch(`/api/onedrive/files?folder_id=${folderId}`, { headers });
-          if (!filesResponse.ok) throw new Error((await filesResponse.json()).detail || 'Failed to fetch files');
-          const apiData = await filesResponse.json();
+          const filesResponse = await apiClient.get(`/api/onedrive/files?folder_id=${folderId}`);
+          if (filesResponse.status !== 200) throw new Error((filesResponse.data).detail || 'Failed to fetch files');
+          const apiData = filesResponse.data;
           filesData = apiData.files || [];
           await cacheFiles(folderId, filesData);
         }
         setFiles(filesData);
         setForceRefresh(false);
       } catch (err: any) {
-        setError(err.message);
+        setError(err.response?.data?.detail || err.message);
       } finally {
         setDataLoading(false);
       }
@@ -224,18 +207,6 @@ function App() {
   };
 
   const renderContent = () => {
-    if (loading) {
-      return <CircularProgress sx={{ m: 4 }} />;
-    }
-    if (!user) {
-      return (
-        <Box sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="h6">Welcome to Declutter Cloud</Typography>
-          <Typography>Please log in to manage your files.</Typography>
-          <Button variant="contained" sx={{ mt: 2 }} onClick={() => setAuthModalOpen(true)}>Login</Button>
-        </Box>
-      );
-    }
     if (error) {
       return <Typography color="error" sx={{ p: 3 }}>Error: {error}</Typography>;
     }
@@ -261,13 +232,12 @@ function App() {
       case 'Smart Organiser':
         return <SmartOrganiser />;
       case 'Settings':
-        return user ? <SettingsModal open={true} onClose={() => setSelected('My Files')} user={user} refreshUser={fetchUserProfile} /> : null;
+        return <SettingsModal open={true} onClose={() => setSelected('My Files')} user={user} refreshUser={fetchUserProfile} />;
       default:
         return <Typography sx={{ p: 3 }}>Select a section</Typography>;
     }
   };
 
-  // Sidebar user info and storage (replace old sidebar code)
   const Sidebar = () => (
     <Drawer
       variant="permanent"
@@ -304,21 +274,38 @@ function App() {
     </Drawer>
   );
 
-  // Top bar with centered search and right actions
   const TopBar = () => (
-    <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, background: '#fff', color: '#222', boxShadow: '0 1px 4px #e0e0e0' }}>
+    <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
       <Toolbar>
-        <Typography variant="h6" noWrap sx={{ color: 'primary.main', fontWeight: 700, letterSpacing: 1, mr: 2, cursor: 'pointer' }} onClick={() => setSelected('My Files')}>
+        <Logo size={32} />
+        <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, ml: 1.5 }}>
           Declutter Cloud
         </Typography>
-        <Box sx={{ flex: 1 }} />
-        <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-          <HelpOutlineIcon sx={{ ml: 1, cursor: 'pointer', color: 'primary.main' }} fontSize="large" titleAccess="Help" onClick={() => setSelected('Help')} />
-          {user ? <UserProfile user={user} onLogout={handleLogout} /> : <Button color="primary" onClick={() => setAuthModalOpen(true)}>Login</Button>}
-        </Box>
+        {user ? (
+          <UserProfile user={user} onLogout={handleLogout} />
+        ) : (
+          <Button color="inherit" onClick={() => setAuthModalOpen(true)}>Login</Button>
+        )}
       </Toolbar>
     </AppBar>
   );
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!user) {
+    return (
+      <>
+        <HomePage onLoginClick={() => setAuthModalOpen(true)} />
+        <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} onSuccess={handleLoginSuccess} />
+      </>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>

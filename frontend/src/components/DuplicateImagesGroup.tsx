@@ -3,7 +3,7 @@ import { Box, Typography, Button, Checkbox, Tooltip, Stack, Paper, CircularProgr
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ImageIcon from '@mui/icons-material/Image';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { getImageDownloadUrls } from '../api/images';
+import apiClient from '../api/api';
 
 interface DuplicateImage {
   id: number;
@@ -37,22 +37,20 @@ const DuplicateImagesGroup: React.FC<DuplicateImagesGroupProps> = ({ images, onD
       const protectedUrl = `/api/files/${img.id}/download`;
       if (!imageUrls[img.id]) {
         setLoadingUrls(prev => ({ ...prev, [img.id]: true }));
-        const fetchImg = async () => {
+        const fetchImageWithToken = async (url: string) => {
           try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(protectedUrl, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error('Failed to fetch image');
-            const blob = await res.blob();
-            setImageUrls(prev => ({ ...prev, [img.id]: URL.createObjectURL(blob) }));
-          } catch {
+            const response = await apiClient.get(url, { responseType: 'blob' });
+            const imageBlob = response.data;
+            const imageUrl = URL.createObjectURL(imageBlob);
+            setImageUrls(prev => ({ ...prev, [img.id]: imageUrl }));
+          } catch (error) {
+            console.error("Error fetching image:", error);
             setBroken(prev => ({ ...prev, [img.id]: true }));
           } finally {
             setLoadingUrls(prev => ({ ...prev, [img.id]: false }));
           }
         };
-        fetchImg();
+        fetchImageWithToken(protectedUrl);
       }
     });
     // Cleanup blob URLs on unmount

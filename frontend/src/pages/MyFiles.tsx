@@ -13,6 +13,7 @@ import CrossCloudActions from '../components/CrossCloudActions';
 import { upsertFiles } from '../api/files';
 import Search from '@mui/icons-material/Search';
 import { InputBase } from '@mui/material';
+import apiClient from '../api/api';
 
 interface FileItem {
   id: string;
@@ -53,13 +54,12 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
     scanFolder
   } = useFolderScan(user?.id || '');
 
-  const fetchAllFilesRecursive = async (folderId: string, token: string, maxDepth: number, currentDepth = 0, progressCb?: (current: number, total: number) => void): Promise<any[]> => {
-    const headers = { 'Authorization': `Bearer ${token}` };
-    let url = `/api/onedrive/files?folder_id=${folderId}`;
-    const response = await fetch(url, { headers });
-    if (!response.ok) return [];
-    const data = await response.json();
-    const children = data.files || [];
+  const fetchAllFilesRecursive = async (folderId: string, maxDepth: number, currentDepth = 0, progressCb?: (current: number, total: number) => void): Promise<any[]> => {
+    const url = `/api/onedrive/files?folder_id=${folderId}`;
+    const response = await apiClient.get(url);
+    if (response.status !== 200) return [];
+    
+    const children = response.data.files || [];
     const files = children.filter((item: any) => item.type === 'file');
     const folders = children.filter((item: any) => item.type === 'folder');
     let allFiles = [...files];
@@ -67,7 +67,7 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
     if (maxDepth < 0 || currentDepth < maxDepth) {
       for (let i = 0; i < folders.length; i++) {
         const subfolder = folders[i];
-        const subFiles = await fetchAllFilesRecursive(subfolder.id, token, maxDepth, currentDepth + 1, progressCb);
+        const subFiles = await fetchAllFilesRecursive(subfolder.id, maxDepth, currentDepth + 1, progressCb);
         allFiles = allFiles.concat(subFiles);
         if (progressCb) progressCb(allFiles.length, allFiles.length + folders.length - (i + 1));
       }
@@ -86,19 +86,16 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
       setBatchProgress(null);
       setProceedBatch(false);
       try {
-        const token = localStorage.getItem('token');
-        if (!token) throw new Error('No auth token');
         const cached = await getCachedFiles(folder.id);
         if (cached && cached.length > 0) {
           setCachingFolders(prev => ({ ...prev, [folder.id]: false }));
           continue;
         }
         // Estimate number of files/folders in the first level
-        const headers = { 'Authorization': `Bearer ${token}` };
-        let url = `/api/onedrive/files?folder_id=${folder.id}`;
-        const response = await fetch(url, { headers });
-        if (!response.ok) throw new Error('Failed to fetch folder');
-        const data = await response.json();
+        const url = `/api/onedrive/files?folder_id=${folder.id}`;
+        const response = await apiClient.get(url);
+        if (response.status !== 200) throw new Error('Failed to fetch folder');
+        const data = response.data;
         const children = data.files || [];
         const foldersFirstLevel = children.filter((item: any) => item.type === 'folder');
         const filesFirstLevel = children.filter((item: any) => item.type === 'file');
@@ -108,7 +105,7 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
           return;
         }
         setBatchProgress({ folderId: folder.id, current: 0, total: estimatedTotal });
-        const allFiles = await fetchAllFilesRecursive(folder.id, token, maxDepth, 0, (current, total) => {
+        const allFiles = await fetchAllFilesRecursive(folder.id, maxDepth, 0, (current: number, total: number) => {
           setBatchProgress({ folderId: folder.id, current, total });
         });
         await cacheFiles(folder.id, allFiles);
@@ -161,14 +158,16 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
     setCachingFolders(prev => ({ ...prev, [folder.id]: true }));
     setCachingErrors(prev => ({ ...prev, [folder.id]: '' }));
     try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No auth token');
+      const cached = await getCachedFiles(folder.id);
+      if (cached && cached.length > 0) {
+        setCachingFolders(prev => ({ ...prev, [folder.id]: false }));
+        return;
+      }
       // Estimate number of files/folders in the first level
-      const headers = { 'Authorization': `Bearer ${token}` };
-      let url = `/api/onedrive/files?folder_id=${folder.id}`;
-      const response = await fetch(url, { headers });
-      if (!response.ok) throw new Error('Failed to fetch folder');
-      const data = await response.json();
+      const url = `/api/onedrive/files?folder_id=${folder.id}`;
+      const response = await apiClient.get(url);
+      if (response.status !== 200) throw new Error('Failed to fetch folder');
+      const data = response.data;
       const children = data.files || [];
       const foldersFirstLevel = children.filter((item: any) => item.type === 'folder');
       const filesFirstLevel = children.filter((item: any) => item.type === 'file');
@@ -178,7 +177,7 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         return;
       }
       setBatchProgress({ folderId: folder.id, current: 0, total: estimatedTotal });
-      const allFiles = await fetchAllFilesRecursive(folder.id, token, maxDepth, 0, (current, total) => {
+      const allFiles = await fetchAllFilesRecursive(folder.id, maxDepth, 0, (current: number, total: number) => {
         setBatchProgress({ folderId: folder.id, current, total });
       });
       await cacheFiles(folder.id, allFiles);

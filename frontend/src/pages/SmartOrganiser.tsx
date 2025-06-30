@@ -12,6 +12,7 @@ import { getDuplicateFiles, getSimilarFiles } from '../api/duplicates';
 import { getDuplicateImages } from '../api/images';
 import { createRule } from '../api/rules';
 import FileGroupList, { type FileGroupFile } from '../components/SimilarFilesGroup';
+import apiClient from '../api/api';
 
 interface CleanupFile {
   id: number;
@@ -55,6 +56,18 @@ interface SimilarFilesGroupProps {
   onDeleteSelected?: (ids: number[]) => void;
 }
 
+interface Rule {
+  field: string;
+  condition: string;
+  value: string;
+}
+
+interface Suggestion {
+  id: string;
+  name: string;
+  reason: string;
+}
+
 const menuDescriptions: Record<string, string> = {
   dashboard: "See an overview of your files and storage usage.",
   organise: "Automatically sort your files into folders by type.",
@@ -66,6 +79,8 @@ const menuDescriptions: Record<string, string> = {
 };
 
 const SmartOrganiser = () => {
+  const [rules, setRules] = useState<Rule[]>([{ field: 'file_type', condition: 'equals', value: 'jpg' }]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,54 +110,65 @@ const SmartOrganiser = () => {
 
   const handleOrganise = async () => {
     setLoading(true);
-    setResult(null);
     setError(null);
-    const token = localStorage.getItem('token');
-
-    if (!token) {
-      setError("Authentication token not found.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch('/api/onedrive/smart_organise', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ strategy: 'by_file_type' })
+      const response = await apiClient.post('/api/onedrive/smart_organise', {
+        rules: rules.map(({ field, condition, value }) => ({ field, condition, value }))
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to organise files.');
-      }
-
-      setResult(data.summary);
+      setSuggestions(response.data.suggestions || []);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.detail || 'Failed to get suggestions.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAction = async (id: string, action: 'delete' | 'archive' | 'ignore') => {
+    try {
+      switch (action) {
+        case 'delete':
+          await apiClient.delete(`/api/files/${id}`);
+          break;
+        case 'archive':
+          await apiClient.post(`/api/files/${id}/archive`);
+          break;
+        case 'ignore':
+          await apiClient.post(`/api/files/${id}/ignore`);
+          break;
+      }
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      console.error(`Failed to ${action} file`, err);
+    }
+  };
+
+  const handleBulkAction = async (action: 'delete' | 'archive' | 'ignore') => {
+    setLoading(true);
+    try {
+      const ids = suggestions.map(s => s.id);
+      await apiClient.post(`/api/files/${action}`, { file_ids: ids });
+      setSuggestions([]);
+    } catch (err) {
+      console.error(`Failed to ${action} files`, err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/api/files/${id}`, { method: 'DELETE' });
+    await apiClient.delete(`/api/files/${id}`);
     setCleanupFiles(files => files.filter(f => f.id !== id));
     setSnackbar({ open: true, message: 'File deleted!' });
   };
 
   const handleArchive = async (id: number) => {
-    await fetch(`/api/files/${id}/archive`, { method: 'POST' });
+    await apiClient.post(`/api/files/${id}/archive`);
     setCleanupFiles(files => files.filter(f => f.id !== id));
     setSnackbar({ open: true, message: 'File archived!' });
   };
 
   const handleIgnore = async (id: number) => {
-    await fetch(`/api/files/${id}/ignore`, { method: 'POST' });
+    await apiClient.post(`/api/files/${id}/ignore`);
     setCleanupFiles(files => files.filter(f => f.id !== id));
     // No snackbar for ignore
   };
@@ -153,14 +179,8 @@ const SmartOrganiser = () => {
   };
 
   const handleDeleteSimilarFiles = async (groupIdx: number, ids: number[]) => {
-    const token = localStorage.getItem('token');
-    await fetch('/api/files/delete', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ids }),
+    await apiClient.post('/api/files/delete', {
+      ids
     });
     setSimilarFiles(prev => prev.map((group, idx) =>
       idx === groupIdx ? group.filter(f => !ids.includes(f.id)) : group

@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Delete, Folder, PlaylistAdd, Refresh } from '@mui/icons-material';
 import { getCachedFiles, cacheFiles, clearFilesCache } from '../utils/idbCache';
+import apiClient from '../api/api';
 
 interface File {
   id: string;
@@ -53,16 +54,16 @@ const Compare: React.FC<CompareProps> = ({ folders, setFolders }) => {
     setFolderLoading(prev => ({ ...prev, [folderId]: true }));
     try {
       const folder = folders.find(f => f.id === folderId);
-      const token = localStorage.getItem('token');
-      const headers = { 'Authorization': `Bearer ${token}` };
-      let url = `/api/onedrive/files?folder_id=${folderId}&recursive=true`;
       const depth = folder && typeof folder.maxDepth === 'number' ? folder.maxDepth : -1;
+      let url = `/api/onedrive/files?folder_id=${folderId}&recursive=true`;
       if (depth > 0) url += `&max_depth=${depth}`;
-      const response = await fetch(url, { headers });
-      if (!response.ok) throw new Error((await response.json()).detail || 'Failed to fetch files');
-      const data = await response.json();
-      await cacheFiles(folderId, data.files || []);
-      setFolderStats(prev => ({ ...prev, [folderId]: { count: (data.files || []).length, cached: false } }));
+      
+      const response = await apiClient.get(url);
+
+      if (response.status !== 200) throw new Error((response.data).detail || 'Failed to fetch files');
+      
+      await cacheFiles(folderId, response.data.files || []);
+      setFolderStats(prev => ({ ...prev, [folderId]: { count: (response.data.files || []).length, cached: false } }));
     } catch (err: any) {
       setFolderStats(prev => ({ ...prev, [folderId]: { count: 0, cached: false, error: err.message } }));
     } finally {
@@ -85,15 +86,12 @@ const Compare: React.FC<CompareProps> = ({ folders, setFolders }) => {
         let cached = true;
         if (!files || files.length === 0) {
           // Fetch from API and cache if missing
-          const token = localStorage.getItem('token');
-          const headers = { 'Authorization': `Bearer ${token}` };
-          let url = `/api/onedrive/files?folder_id=${folder.id}&recursive=true`;
           const depth = typeof folder.maxDepth === 'number' ? folder.maxDepth : -1;
+          let url = `/api/onedrive/files?folder_id=${folder.id}&recursive=true`;
           if (depth > 0) url += `&max_depth=${depth}`;
-          const response = await fetch(url, { headers });
-          if (!response.ok) throw new Error((await response.json()).detail || 'Failed to fetch files');
-          const data = await response.json();
-          files = data.files || [];
+          const response = await apiClient.get(url);
+          if (response.status !== 200) throw new Error((response.data).detail || 'Failed to fetch files');
+          files = response.data.files || [];
           await cacheFiles(folder.id, files);
           cached = false;
         }
@@ -159,17 +157,10 @@ const Compare: React.FC<CompareProps> = ({ folders, setFolders }) => {
     setError(null);
     setDeleteStatus(null);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/onedrive/delete_files', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ file_ids: fileIdsToDelete }),
-      });
-      const data = await response.json();
-      if (response.ok && data.status !== 'partial_success') {
+      const response = await apiClient.post('/api/onedrive/delete_files', { file_ids: fileIdsToDelete });
+      
+      const data = response.data;
+      if (response.status === 200 && data.status !== 'partial_success') {
         // Clear cache for all involved folders
         for (const folder of folders) {
           await clearFilesCache(folder.id);

@@ -12,15 +12,18 @@ import {
   Alert,
   CircularProgress,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  Tabs,
+  Tab
 } from '@mui/material';
 import { Visibility, VisibilityOff, Google, Microsoft } from '@mui/icons-material';
 import { getSessionId } from '../utils/sessionId';
+import apiClient from '../api/api';
 
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (user?: any) => Promise<void>;
+  onSuccess: (data?: any) => void;
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
@@ -30,48 +33,40 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError(null);
 
     try {
-      const endpoint = isLogin ? '/auth/token' : '/auth/register';
-      const body = isLogin 
-        ? JSON.stringify({ username: email, password })
-        : JSON.stringify({ email, password, name });
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body,
+      const endpoint = mode === 'login' ? '/auth/token' : '/auth/register';
+      const response = await apiClient.post(endpoint, { 
+        email, 
+        password,
+        ...(mode === 'login' && { username: email })
       });
+      
+      const data = response.data;
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Authentication failed');
+      if (response.status !== 200) {
+        throw new Error(data.detail || `Failed to ${mode}`);
       }
-
-      if (isLogin) {
-        // Store JWT token
+      
+      if (data.access_token) {
         localStorage.setItem('token', data.access_token);
-        // The parent component will fetch user info
-        await onSuccess(data);
+        onSuccess();
       } else {
-        // Registration successful, switch to login and show message
-        setIsLogin(true);
-        setPassword('');
-        setError('');
-        setRegistrationSuccess(true);
+        // Handle registration success that doesn't return a token immediately
+        if (mode === 'register') {
+          setMode('login'); // Switch to login so the user can sign in
+        }
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.detail || err.message || 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -107,7 +102,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        {isLogin ? 'Sign In' : 'Create Account'}
+        {mode === 'login' ? 'Sign In' : 'Create Account'}
       </DialogTitle>
       
       <DialogContent>
@@ -175,7 +170,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
             sx={{ mt: 3, mb: 2 }}
             data-testid="auth-submit"
           >
-            {loading ? <CircularProgress size={24} /> : (isLogin ? 'Sign In' : 'Create Account')}
+            {loading ? <CircularProgress size={24} /> : (mode === 'login' ? 'Sign In' : 'Create Account')}
           </Button>
         </form>
 
@@ -210,15 +205,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
 
       <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
         <Typography variant="body2">
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
+          {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
           <Button
             onClick={() => {
-              setIsLogin(!isLogin);
+              setMode(mode === 'login' ? 'register' : 'login');
               resetForm();
             }}
             sx={{ textTransform: 'none' }}
           >
-            {isLogin ? 'Sign up' : 'Sign in'}
+            {mode === 'login' ? 'Sign up' : 'Sign in'}
           </Button>
         </Typography>
       </DialogActions>

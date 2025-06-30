@@ -104,7 +104,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, user, refr
     }
   };
 
-  const handleDisconnect = async (providerId: string) => {
+  const handleDisconnect = async (connectionId: number) => {
     setLoading(true);
     setError('');
     try {
@@ -119,7 +119,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, user, refr
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ provider: providerId }),
+        body: JSON.stringify({ connectionId }),
       });
       if (response.ok) {
         await refreshUser();
@@ -203,7 +203,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose, user, refr
                     variant="outlined"
                     color="error"
                     startIcon={<LinkOff />}
-                    onClick={() => handleDisconnect(provider.id)}
+                    onClick={() => handleDisconnect(user.connections.find((c: any) => c.provider === provider.id).id)}
                     disabled={loading}
                   >
                     Disconnect
