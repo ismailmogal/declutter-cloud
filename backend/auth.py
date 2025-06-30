@@ -39,21 +39,21 @@ def decode_access_token(token: str):
         return None
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    print("--- Attempting to get current user ---")
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
-        payload = decode_access_token(token)
-        print(f"Token payload: {payload}")
-        if not payload or "sub" not in payload:
-            raise HTTPException(status_code=401, detail="Invalid authentication")
-        
-        user_id = int(payload["sub"])
-        print(f"User ID from token: {user_id}")
-        
-        user = db.query(User).filter(User.id == user_id).first()
-        print(f"User from DB: {user}")
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    except Exception as e:
-        print(f"!!! AN ERROR OCCURRED: {e} !!!")
-        raise 
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = db.query(User).filter(User.email == email).first() # type: ignore
+    
+    if user is None:
+        raise credentials_exception
+    return user 

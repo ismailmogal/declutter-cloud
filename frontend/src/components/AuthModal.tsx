@@ -43,28 +43,29 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
     setError(null);
 
     try {
-      const endpoint = mode === 'login' ? '/auth/token' : '/auth/register';
-      const response = await apiClient.post(endpoint, { 
-        email, 
-        password,
-        ...(mode === 'login' && { username: email })
-      });
-      
-      const data = response.data;
-
-      if (response.status !== 200) {
-        throw new Error(data.detail || `Failed to ${mode}`);
-      }
-      
-      if (data.access_token) {
-        localStorage.setItem('token', data.access_token);
-        onSuccess();
-      } else {
-        // Handle registration success that doesn't return a token immediately
-        if (mode === 'register') {
-          setMode('login'); // Switch to login so the user can sign in
+      if (mode === 'login') {
+        const response = await apiClient.post('/auth/token', { username: email, password });
+        
+        const data = response.data;
+        if (response.status !== 200) {
+          throw new Error(data.detail || 'Failed to login');
         }
+        
+        if (data.access_token) {
+          localStorage.setItem('token', data.access_token);
+          onSuccess();
+        }
+
+      } else { // Registration
+        const response = await apiClient.post('/auth/register', { email, password, name });
+        if (response.status !== 200) {
+          throw new Error(response.data.detail || 'Failed to register');
+        }
+        // After successful registration, switch to login view with a success message
+        setRegistrationSuccess(true);
+        setMode('login');
       }
+
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'An unknown error occurred');
     } finally {

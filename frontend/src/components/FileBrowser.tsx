@@ -69,6 +69,8 @@ interface FileBrowserProps {
   renderFileTags?: (file: FileItem) => React.ReactNode;
   renderCrossCloudActions?: (file: FileItem) => React.ReactNode;
   searchTerm?: string;
+  selectedFolders?: Record<string, boolean>;
+  onSelectFolder?: (folderId: string, isSelected: boolean) => void;
 }
 
 const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -84,6 +86,8 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   renderFileTags,
   renderCrossCloudActions,
   searchTerm = '',
+  selectedFolders = {},
+  onSelectFolder = () => {},
 }) => {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'last_modified'>('name');
@@ -157,21 +161,20 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
       const newSelected = files
         .filter(f => f.type === 'folder')
         .reduce((acc, file) => ({ ...acc, [file.id]: true }), {});
-      setSelected(newSelected);
-      return;
+      
+      // Notify parent about all selections
+      Object.keys(newSelected).forEach(id => onSelectFolder(id, true));
+
+    } else {
+      // Notify parent about all deselections
+      Object.keys(selectedFolders).forEach(id => onSelectFolder(id, false));
     }
-    setSelected({});
   };
 
   const handleClick = (id: string, isFolder: boolean) => {
-    if (!isFolder) return; // Or handle file selection differently
-    const newSelected = { ...selected };
-    if (newSelected[id]) {
-      delete newSelected[id];
-    } else {
-      newSelected[id] = true;
-    }
-    setSelected(newSelected);
+    if (!isFolder) return;
+    const isCurrentlySelected = !!selectedFolders[id];
+    onSelectFolder(id, !isCurrentlySelected);
   };
   
   const handleAddToCompareClick = () => {
@@ -180,7 +183,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
     setSelected({}); // Clear selection after adding
   };
 
-  const isSelected = (id: string) => !!selected[id];
+  const isSelected = (id: string) => !!selectedFolders[id];
 
   if (error) {
     return (

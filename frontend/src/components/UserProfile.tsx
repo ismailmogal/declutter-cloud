@@ -7,17 +7,23 @@ import {
   MenuItem,
   IconButton,
   Divider,
-  Chip
+  ListItemIcon
 } from '@mui/material';
-import { Logout } from '@mui/icons-material';
+import { Logout, Settings } from '@mui/icons-material';
 
 interface UserProfileProps {
-  user: any;
+  user: {
+    name: string;
+    email: string;
+    avatar_url?: string;
+  };
   onLogout: () => void;
+  onSettingsClick: () => void;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout, onSettingsClick }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -29,12 +35,18 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout }) => {
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
-    onLogout();
     handleClose();
+    onLogout();
   };
 
-  const getInitials = (name: string) => {
-    return name
+  const handleSettings = () => {
+    handleClose();
+    onSettingsClick();
+  };
+
+  const getInitials = (name?: string, email?: string) => {
+    const target = name || email || '';
+    return target
       .split(' ')
       .map(word => word.charAt(0))
       .join('')
@@ -44,34 +56,13 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout }) => {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-      {user.provider && (
-        <Chip
-          label={user.provider}
-          size="small"
-          color="primary"
-          variant="outlined"
-          sx={{ mr: 1 }}
-        />
-      )}
-      <IconButton
-        size="large"
-        onClick={handleMenu}
-        color="inherit"
-      >
-        {user.avatar_url ? (
-          <Avatar src={user.avatar_url} sx={{ width: 32, height: 32 }}>
-            {getInitials(user.name || user.email)}
-          </Avatar>
-        ) : (
-          <Avatar sx={{ width: 32, height: 32 }}>
-            {getInitials(user.name || user.email)}
-          </Avatar>
-        )}
+      <IconButton onClick={handleMenu} size="small" sx={{ ml: 2 }}>
+        <Avatar src={user.avatar_url} sx={{ width: 32, height: 32 }}>{user.name?.[0]}</Avatar>
       </IconButton>
       
       <Menu
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={open}
         onClose={handleClose}
         anchorOrigin={{
           vertical: 'bottom',
@@ -82,8 +73,17 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout }) => {
           horizontal: 'right',
         }}
       >
+        <MenuItem onClick={handleSettings}>
+          <ListItemIcon>
+            <Settings fontSize="small" />
+          </ListItemIcon>
+          Settings
+        </MenuItem>
+        <Divider />
         <MenuItem onClick={handleLogout}>
-          <Logout sx={{ mr: 1 }} />
+          <ListItemIcon>
+            <Logout fontSize="small" />
+          </ListItemIcon>
           Logout
         </MenuItem>
       </Menu>

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, BigInteger, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ class User(Base):
     name = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)
     hashed_password = Column(String(255), nullable=True)  # For email/password users
+    preferences = Column(JSONB, nullable=True) # For storing user preferences like theme
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -11,7 +11,7 @@ import { getCleanupRecommendations, deleteFiles } from '../api/files';
 import { getDuplicateFiles, getSimilarFiles } from '../api/duplicates';
 import { getDuplicateImages } from '../api/images';
 import { createRule } from '../api/rules';
-import FileGroupList, { type FileGroupFile } from '../components/SimilarFilesGroup';
+import FileGroupList, { type FileGroupFile as BaseFileGroupFile } from '../components/SimilarFilesGroup';
 import apiClient from '../api/api';
 
 interface CleanupFile {
@@ -66,6 +66,10 @@ interface Suggestion {
   id: string;
   name: string;
   reason: string;
+}
+
+interface FileGroupFile extends BaseFileGroupFile {
+  cloud_id: string;
 }
 
 const menuDescriptions: Record<string, string> = {
@@ -146,8 +150,16 @@ const SmartOrganiser = () => {
     setLoading(true);
     try {
       const ids = suggestions.map(s => s.id);
-      await apiClient.post(`/api/files/${action}`, { file_ids: ids });
-      setSuggestions([]);
+      if (action === 'delete') {
+        // First delete from OneDrive
+        await apiClient.post('/api/onedrive/delete_files', { file_ids: ids });
+        // Then delete from DB
+        await apiClient.post('/api/files/delete', ids);
+        setSuggestions([]);
+      } else {
+        await apiClient.post(`/api/files/${action}`, { file_ids: ids });
+        setSuggestions([]);
+      }
     } catch (err) {
       console.error(`Failed to ${action} files`, err);
     } finally {
@@ -156,7 +168,10 @@ const SmartOrganiser = () => {
   };
 
   const handleDelete = async (id: number) => {
-    await apiClient.delete(`/api/files/${id}`);
+    // First delete from OneDrive
+    await apiClient.post('/api/onedrive/delete_files', { file_ids: [id] });
+    // Then delete from DB
+    await apiClient.post('/api/files/delete', [id]);
     setCleanupFiles(files => files.filter(f => f.id !== id));
     setSnackbar({ open: true, message: 'File deleted!' });
   };
@@ -179,20 +194,34 @@ const SmartOrganiser = () => {
   };
 
   const handleDeleteSimilarFiles = async (groupIdx: number, ids: number[]) => {
-    await apiClient.post('/api/files/delete', {
-      ids
-    });
-    setSimilarFiles(prev => prev.map((group, idx) =>
-      idx === groupIdx ? group.filter(f => !ids.includes(f.id)) : group
-    ));
+    // Find the files in the group to get their cloud_ids
+    const filesToDelete = similarFiles[groupIdx].filter(f => ids.includes(f.id));
+    const cloudIdsToDelete = filesToDelete.map(f => f.cloud_id);
+    // First delete from OneDrive
+    await apiClient.post('/api/onedrive/delete_files', { file_ids: cloudIdsToDelete });
+    // Then delete from DB
+    await apiClient.post('/api/files/delete', ids);
+    // Update similarFiles state: remove deleted files and filter out groups with only one file
+    setSimilarFiles(prev => prev
+      .map((group, idx) => idx === groupIdx ? group.filter(f => !ids.includes(f.id)) : group)
+      .filter(group => group.length > 1)
+    );
     setSnackbar({ open: true, message: 'Files deleted successfully!' });
   };
 
   const handleDeleteDuplicateImages = async (groupIdx: number, ids: number[]) => {
-    await deleteFiles(ids);
-    setDuplicateImages(prev => prev.map((group, idx) =>
-      idx === groupIdx ? group.filter(img => !ids.includes(img.id)) : group
-    ));
+    // Find the files in the group to get their cloud_ids
+    const filesToDelete = duplicateImages[groupIdx].filter(f => ids.includes(f.id));
+    const cloudIdsToDelete = filesToDelete.map(f => f.cloud_id);
+    // First delete from OneDrive
+    await apiClient.post('/api/onedrive/delete_files', { file_ids: cloudIdsToDelete });
+    // Then delete from DB
+    await apiClient.post('/api/files/delete', ids);
+    // Update duplicateImages state: remove deleted files and filter out groups with only one file
+    setDuplicateImages(prev => prev
+      .map((group, idx) => idx === groupIdx ? group.filter(img => !ids.includes(img.id)) : group)
+      .filter(group => group.length > 1)
+    );
     setSnackbar({ open: true, message: 'Images deleted successfully!' });
   };
 
