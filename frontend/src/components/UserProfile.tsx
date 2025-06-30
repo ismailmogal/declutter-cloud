@@ -9,15 +9,14 @@ import {
   Divider,
   Chip
 } from '@mui/material';
-import { Logout, Settings } from '@mui/icons-material';
+import { Logout } from '@mui/icons-material';
 
 interface UserProfileProps {
   user: any;
   onLogout: () => void;
-  onOpenSettings: () => void;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout, onOpenSettings }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -34,11 +33,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout, onOpenSetting
     handleClose();
   };
 
-  const handleSettings = () => {
-    onOpenSettings();
-    handleClose();
-  };
-
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -50,20 +44,15 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout, onOpenSetting
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-        <Typography variant="body2" sx={{ mr: 1 }}>
-          {user.name || user.email}
-        </Typography>
-        {user.provider && (
-          <Chip
-            label={user.provider}
-            size="small"
-            color="primary"
-            variant="outlined"
-          />
-        )}
-      </Box>
-      
+      {user.provider && (
+        <Chip
+          label={user.provider}
+          size="small"
+          color="primary"
+          variant="outlined"
+          sx={{ mr: 1 }}
+        />
+      )}
       <IconButton
         size="large"
         onClick={handleMenu}
@@ -93,11 +82,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onLogout, onOpenSetting
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleSettings}>
-          <Settings sx={{ mr: 1 }} />
-          Settings
-        </MenuItem>
-        <Divider />
         <MenuItem onClick={handleLogout}>
           <Logout sx={{ mr: 1 }} />
           Logout

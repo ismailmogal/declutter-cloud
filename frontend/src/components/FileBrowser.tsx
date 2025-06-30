@@ -68,6 +68,7 @@ interface FileBrowserProps {
   onAddFoldersToCompare: (folders: FileItem[]) => void;
   renderFileTags?: (file: FileItem) => React.ReactNode;
   renderCrossCloudActions?: (file: FileItem) => React.ReactNode;
+  searchTerm?: string;
 }
 
 const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -81,9 +82,9 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   onRefresh,
   onAddFoldersToCompare,
   renderFileTags,
-  renderCrossCloudActions
+  renderCrossCloudActions,
+  searchTerm = '',
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'last_modified'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -107,8 +108,9 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   const filteredAndSortedFiles = files
-    .filter(file => 
-      file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    .filter(file =>
+      file.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (file.tags && file.tags.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     .sort((a, b) => {
       let aValue: any, bValue: any;
@@ -213,45 +215,6 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
         </Box>
       </Box>
 
-      {/* Search and Sort */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            background: '#fff',
-            borderRadius: '999px',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-            px: 2,
-            py: 0.5,
-            width: '100%',
-            maxWidth: 500,
-          }}
-        >
-          <Search sx={{ mr: 1, color: 'text.secondary', fontSize: 28 }} />
-          <input
-            type="text"
-            placeholder="Search everything"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              border: 'none',
-              outline: 'none',
-              fontSize: '1.2rem',
-              background: 'transparent',
-              width: '100%',
-              padding: '10px 0',
-              color: '#222',
-            }}
-          />
-          {searchTerm && (
-            <IconButton size="small" onClick={() => setSearchTerm('')} sx={{ ml: 1 }}>
-              <Close fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-      </Box>
-
       {/* File List */}
       {loading ? (
         <Grid container spacing={2}>
@@ -318,14 +281,14 @@ const FileBrowser: React.FC<FileBrowserProps> = ({
                       <Sort sx={{ ml: 1, opacity: sortBy === 'name' ? 1 : 0.3 }} />
                     </Button>
                   </TableCell>
-                  <TableCell sortDirection={sortBy === 'last_modified' ? sortOrder : false}>
-                    <Button fullWidth onClick={() => handleSort('last_modified')}>
+                  <TableCell align="left" sortDirection={sortBy === 'last_modified' ? sortOrder : false}>
+                    <Button fullWidth onClick={() => handleSort('last_modified')} sx={{ justifyContent: 'flex-start' }}>
                       Modified 
                       <Sort sx={{ ml: 1, opacity: sortBy === 'last_modified' ? 1 : 0.3 }} />
                     </Button>
                   </TableCell>
-                  <TableCell sortDirection={sortBy === 'size' ? sortOrder : false}>
-                    <Button fullWidth onClick={() => handleSort('size')}>
+                  <TableCell align="left" sortDirection={sortBy === 'size' ? sortOrder : false}>
+                    <Button fullWidth onClick={() => handleSort('size')} sx={{ justifyContent: 'flex-start' }}>
                       File size 
                       <Sort sx={{ ml: 1, opacity: sortBy === 'size' ? 1 : 0.3 }} />
                     </Button>

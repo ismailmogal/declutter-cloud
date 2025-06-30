@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import type { FC, Dispatch, SetStateAction } from 'react';
-import { Alert, Box, Paper, Typography, Button, Chip, CircularProgress, Tooltip, Slider, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions, IconButton } from '@mui/material';
+import { Alert, Box, Paper, Typography, Button, Chip, CircularProgress, Tooltip, Slider, LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Breadcrumbs, Link } from '@mui/material';
 import FileBrowser from '../components/FileBrowser';
 import { getCachedFiles, cacheFiles } from '../utils/idbCache';
 import ErrorIcon from '@mui/icons-material/Error';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useFolderScan } from '../hooks/useFolderScan';
-import TagFilterBar from '../components/TagFilterBar';
 import FileTags from '../components/FileTags';
-import { searchFilesByTags, getTags } from '../api/files';
 import { moveFileToCloud, copyFileToCloud } from '../api/cloud';
 import CrossCloudActions from '../components/CrossCloudActions';
+import { upsertFiles } from '../api/files';
+import Search from '@mui/icons-material/Search';
+import { InputBase } from '@mui/material';
 
 interface FileItem {
   id: string;
@@ -46,32 +47,11 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
   const [batchWarning, setBatchWarning] = useState<{ folder: any, estimated: number } | null>(null);
   const [proceedBatch, setProceedBatch] = useState(false);
   const FILE_WARN_THRESHOLD = 1000;
-  const [tags, setTags] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<FileItem[]>(files);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const {
-    scanFolder,
-    progress,
-    status: scanStatus,
-    error: scanError,
-    isCancelling,
-    foldersVisited,
-    filesFound,
-    cancelScan
+    scanFolder
   } = useFolderScan(user?.id || '');
-
-  useEffect(() => {
-    getTags().then(data => setTags(data.tags || []));
-  }, []);
-
-  useEffect(() => {
-    if (selectedTags.length > 0) {
-      searchFilesByTags(selectedTags.join(',')).then(setFilteredFiles);
-    } else {
-      setFilteredFiles(files);
-    }
-  }, [selectedTags, files]);
 
   const fetchAllFilesRecursive = async (folderId: string, token: string, maxDepth: number, currentDepth = 0, progressCb?: (current: number, total: number) => void): Promise<any[]> => {
     const headers = { 'Authorization': `Bearer ${token}` };
@@ -132,6 +112,20 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
           setBatchProgress({ folderId: folder.id, current, total });
         });
         await cacheFiles(folder.id, allFiles);
+        // Upsert files to backend DB
+        try {
+          // Remove downloadUrl dependency - just send basic file metadata
+          const filesWithMetadata = allFiles.map(f => ({
+            ...f,
+            cloud_id: f.id,
+            provider: 'onedrive',
+            // Remove url field entirely
+          }));
+          await upsertFiles(filesWithMetadata);
+        } catch (err) {
+          // Optionally handle/report upsert error
+          console.error('Failed to upsert files to backend', err);
+        }
         setBatchProgress(null);
       } catch (e: any) {
         setCachingErrors(prev => ({ ...prev, [folder.id]: e.message || 'Failed to cache files' }));
@@ -188,6 +182,20 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         setBatchProgress({ folderId: folder.id, current, total });
       });
       await cacheFiles(folder.id, allFiles);
+      // Upsert files to backend DB
+      try {
+        // Remove downloadUrl dependency - just send basic file metadata
+        const filesWithMetadata = allFiles.map(f => ({
+          ...f,
+          cloud_id: f.id,
+          provider: 'onedrive',
+          // Remove url field entirely
+        }));
+        await upsertFiles(filesWithMetadata);
+      } catch (err) {
+        // Optionally handle/report upsert error
+        console.error('Failed to upsert files to backend', err);
+      }
       setBatchProgress(null);
     } catch (e: any) {
       setCachingErrors(prev => ({ ...prev, [folder.id]: e.message || 'Failed to cache files' }));
@@ -199,9 +207,56 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
     }
   };
 
+  const filteredFiles = files.filter(f => {
+    const nameMatch = f.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const tagMatch = f.tags && f.tags.toLowerCase().includes(searchTerm.toLowerCase());
+    return nameMatch || tagMatch;
+  });
+
+  // Sync files to backend DB after every folder navigation
+  useEffect(() => {
+    if (files && files.length > 0) {
+      // Map files to include cloud_id, provider - remove url dependency
+      const filesWithCloudId = files.map(f => ({
+        ...f,
+        cloud_id: f.id,
+        provider: 'onedrive', // Change if supporting multiple providers
+        // Remove url field entirely
+      }));
+      upsertFiles(filesWithCloudId).catch(err => {
+        // Optionally handle/report upsert error
+        console.error('Failed to upsert files to backend', err);
+      });
+    }
+  }, [files]);
+
   // The component now returns the staging area and the file browser
   return (
     <>
+      <Box sx={{ mb: 2 }}>
+        <Paper sx={{ p: 1, display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Search sx={{ mr: 1, color: 'text.secondary' }} />
+          <InputBase
+            placeholder="Search everything (name, tags, ... )"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            sx={{ width: '100%' }}
+          />
+        </Paper>
+        <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
+          {breadcrumbs.map((crumb, idx) => (
+            <Link
+              key={crumb.id}
+              color={idx === breadcrumbs.length - 1 ? 'text.primary' : 'inherit'}
+              underline={idx === breadcrumbs.length - 1 ? 'none' : 'hover'}
+              onClick={() => handleBreadcrumbClick(crumb)}
+              sx={{ cursor: 'pointer' }}
+            >
+              {crumb.name}
+            </Link>
+          ))}
+        </Breadcrumbs>
+      </Box>
       {stagedFolders.length > 0 && (
         <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -272,7 +327,6 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         </Paper>
       )}
       {error && <Alert severity="error">{error}</Alert>}
-      <TagFilterBar tags={tags} selectedTags={selectedTags} onChange={setSelectedTags} />
       <FileBrowser
         files={filteredFiles}
         loading={loading}
@@ -285,15 +339,7 @@ const MyFiles: FC<MyFilesProps> = ({ user, files, loading, error, onCommitToComp
         onRefresh={onRefresh}
         currentPath=""
         renderFileTags={(file: FileItem) => <FileTags tags={file.tags ? file.tags.split(',') : []} />}
-        // renderCrossCloudActions is disabled for now
-        // renderCrossCloudActions={(file: FileItem) => (
-        //   <CrossCloudActions
-        //     fileId={Number(file.id)}
-        //     availableClouds={['onedrive', 'googledrive']}
-        //     onMove={(targetCloud: string) => moveFileToCloud(Number(file.id), targetCloud)}
-        //     onCopy={(targetCloud: string) => copyFileToCloud(Number(file.id), targetCloud)}
-        //   />
-        // )}
+        searchTerm={searchTerm}
       />
       {/* Progress bar and batch warning dialog */}
       {batchProgress && (

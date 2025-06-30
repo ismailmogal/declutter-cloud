@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AppBar, Toolbar, Typography, Box, Drawer, List, ListItem, ListItemText, CircularProgress, ListItemButton, Button, Alert, AlertTitle, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { AppBar, Toolbar, Typography, Box, Drawer, List, ListItem, ListItemText, CircularProgress, ListItemButton, Button, Alert, AlertTitle, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, ListItemIcon, Divider, InputBase, Avatar, LinearProgress } from '@mui/material';
 import AuthModal from './components/AuthModal';
 import UserProfile from './components/UserProfile';
 import DeleteIcon from '@mui/icons-material/Delete';
-import SearchIcon from '@mui/icons-material/Search';
+import Search from '@mui/icons-material/Search';
 import Chip from '@mui/material/Chip';
 import { getSessionId } from './utils/sessionId';
 import Table from '@mui/material/Table';
@@ -21,6 +21,16 @@ import { cacheFiles, getCachedFiles, cacheUIState, getCachedUIState, clearFilesC
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import SettingsModal from './components/SettingsModal';
+import CloudQueueIcon from '@mui/icons-material/CloudQueue';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import Footer from './components/Footer';
+import Support from './components/Support';
+import Help from './components/Help';
+import Modal from '@mui/material/Modal';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 // Page Components
 import MyFiles from './pages/MyFiles';
@@ -31,7 +41,15 @@ const sections = [
   'My Files',
   'Compare',
   'Smart Organiser',
+  'Settings',
 ];
+
+const sectionIcons: Record<string, JSX.Element> = {
+  'My Files': <FolderIcon sx={{ mr: 2 }} />,
+  'Compare': <CompareArrowsIcon sx={{ mr: 2 }} />,
+  'Smart Organiser': <AutoFixHighIcon sx={{ mr: 2 }} />,
+  'Settings': <SettingsIcon sx={{ mr: 2 }} />,
+};
 
 function formatFileSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -69,6 +87,7 @@ function App() {
   const [foldersToCompare, setFoldersToCompare] = useState<any[]>([]);
   const [stagedFolders, setStagedFolders] = useState<any[]>([]);
   const [forceRefresh, setForceRefresh] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem('token');
@@ -241,60 +260,85 @@ function App() {
         return <Compare folders={foldersToCompare} setFolders={setFoldersToCompare} />;
       case 'Smart Organiser':
         return <SmartOrganiser />;
+      case 'Settings':
+        return user ? <SettingsModal open={true} onClose={() => setSelected('My Files')} user={user} refreshUser={fetchUserProfile} /> : null;
       default:
         return <Typography sx={{ p: 3 }}>Select a section</Typography>;
     }
   };
 
-  return (
-    <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
-        <Toolbar>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
-            Declutter Cloud
-          </Typography>
-          {user ? (
-            <UserProfile user={user} onLogout={handleLogout} onOpenSettings={handleOpenSettings} />
-          ) : (
-            <Button color="inherit" onClick={() => setAuthModalOpen(true)}>Login</Button>
-          )}
-        </Toolbar>
-      </AppBar>
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: 240,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box' },
-        }}
-      >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List>
-            {sections.map((text) => (
-              <ListItem key={text} disablePadding>
-                <ListItemButton selected={selected === text} onClick={() => setSelected(text)}>
-                  <ListItemText primary={text} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Toolbar />
-        {renderContent()}
+  // Sidebar user info and storage (replace old sidebar code)
+  const Sidebar = () => (
+    <Drawer
+      variant="permanent"
+      sx={{
+        width: 240,
+        flexShrink: 0,
+        [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box', background: '#f5f6fa', borderRight: '1px solid #e0e0e0' },
+      }}
+    >
+      <Toolbar />
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
+        <Avatar sx={{ width: 56, height: 56, mb: 1 }}>{user?.name?.[0] || '?'}</Avatar>
+        <Typography variant="subtitle1" fontWeight={600}>{user?.name || 'User'}</Typography>
+        <Typography variant="caption" color="text.secondary">{user?.email || ''}</Typography>
       </Box>
-      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} onSuccess={handleLoginSuccess} />
-      {user && <SettingsModal 
-            open={settingsModalOpen}
-            onClose={() => {
-              setSettingsModalOpen(false);
-              fetchUserProfile();
-            }}
-            user={user}
-            refreshUser={fetchUserProfile}
-          />}
+      <Divider />
+      <List>
+        {sections.map((text) => (
+          <ListItem key={text} disablePadding>
+            <ListItemButton selected={selected === text} onClick={() => setSelected(text)}>
+              <ListItemIcon>{sectionIcons[text]}</ListItemIcon>
+              <ListItemText primary={text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+      <Box sx={{ flex: 1 }} />
+      <Divider />
+      <Box sx={{ p: 2 }}>
+        <Typography variant="caption" color="text.secondary">Storage</Typography>
+        <LinearProgress variant="determinate" value={57} sx={{ height: 8, borderRadius: 4, my: 1 }} />
+        <Typography variant="caption" color="text.secondary">118.7 GB used of 205 GB</Typography>
+      </Box>
+    </Drawer>
+  );
+
+  // Top bar with centered search and right actions
+  const TopBar = () => (
+    <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, background: '#fff', color: '#222', boxShadow: '0 1px 4px #e0e0e0' }}>
+      <Toolbar>
+        <Typography variant="h6" noWrap sx={{ color: 'primary.main', fontWeight: 700, letterSpacing: 1, mr: 2, cursor: 'pointer' }} onClick={() => setSelected('My Files')}>
+          Declutter Cloud
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+          <HelpOutlineIcon sx={{ ml: 1, cursor: 'pointer', color: 'primary.main' }} fontSize="large" titleAccess="Help" onClick={() => setSelected('Help')} />
+          {user ? <UserProfile user={user} onLogout={handleLogout} /> : <Button color="primary" onClick={() => setAuthModalOpen(true)}>Login</Button>}
+        </Box>
+      </Toolbar>
+    </AppBar>
+  );
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
+      <TopBar />
+      <Box sx={{ display: 'flex', flex: 1 }}>
+        <Sidebar />
+        <Box component="main" sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <Toolbar />
+          <Box sx={{ flex: 1 }}>
+            {selected === 'Help' ? <Help /> : renderContent()}
+          </Box>
+          <Footer onSupportClick={() => setSupportOpen(true)} />
+        </Box>
+        <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} onSuccess={handleLoginSuccess} />
+        <Modal open={supportOpen} onClose={() => setSupportOpen(false)}>
+          <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', bgcolor: 'background.paper', boxShadow: 24, p: 4, maxWidth: 600, width: '90%', borderRadius: 2 }}>
+            <Support onHelpClick={() => { setSupportOpen(false); setSelected('Help'); }} />
+          </Box>
+        </Modal>
+      </Box>
     </Box>
   );
 }

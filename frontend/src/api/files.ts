@@ -22,4 +22,13 @@ export const getCleanupRecommendations = async () => {
 export const getTags = async () => {
   const res = await axios.get('/api/files/tags', { headers: authHeaders() });
   return res.data;
+};
+
+export const upsertFiles = async (files: any[]) => {
+  await axios.post('/api/files/upsert', files, { headers: authHeaders() });
+};
+
+export const deleteFiles = async (ids: number[]) => {
+  const res = await axios.post('/api/files/delete', ids, { headers: authHeaders() });
+  return res.data;
 }; 

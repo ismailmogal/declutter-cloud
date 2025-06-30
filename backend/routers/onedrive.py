@@ -16,7 +16,8 @@ from database import get_db
 from typing import Optional, Dict, Any, List
 from config import debug_log
 from auth import get_current_user
-from models import User
+from models import User, CloudConnection
+from onedrive_api import get_onedrive_storage_quota
 
 router = APIRouter()
 
@@ -105,4 +106,16 @@ def cancel_scan_job(job_id: str, current_user: User = Depends(get_current_user),
     if job_id not in SCAN_JOBS:
         raise HTTPException(status_code=404, detail="Job not found")
     SCAN_JOBS[job_id]["cancelled"] = True
-    return {"status": "cancelling", "job_id": job_id} 
+    return {"status": "cancelling", "job_id": job_id}
+
+@router.get("/api/onedrive/storage_quota")
+def get_storage_quota(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get the user's OneDrive storage quota (total, used, remaining)"""
+    connection = db.query(CloudConnection).filter(
+        CloudConnection.user_id == current_user.id,
+        CloudConnection.provider == 'onedrive',
+        CloudConnection.is_active == True
+    ).first()
+    if not connection:
+        raise HTTPException(status_code=404, detail="Active OneDrive connection not found.")
+    return get_onedrive_storage_quota(connection, db) 

@@ -1,16 +1,61 @@
-backend/__pycache__
-backend/database.db
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.egg-info/
+venv/
+backend/venv/
+backend/.pytest_cache/
+
+# Alembic (ignore entire directory, except migration scripts if needed)
+backend/alembic/
+
+# Environment & config
 backend/.env
-backend/venv/ 
 frontend/.env
-frontend/.vite
-frontend/node_modules
-frontend/dist
-frontend/build
-frontend/public/static
-frontend/public/media
-frontend/public/robots.txt
-frontend/public/favicon.ico
-frontend/public/robots.txt
+
+# Database
+backend/database.db
+backend/dev.db
+
+# Logs
+*.log
+backend/result.log
+
+# Node/Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.DS_Store
+frontend/.local
+
+# Build output
+frontend/build/
+
+# Public static/media (if generated)
+frontend/public/static/
+frontend/public/media/
+
+# Editor & OS
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Misc
 shared/
-venv/ 
+
+# Ignore migration cache files
+backend/alembic/versions/__pycache__/
+
+# Remove deep __pycache__ ignores (handled by __pycache__/ above)
+# Remove duplicate lines
+podman-compose.yml

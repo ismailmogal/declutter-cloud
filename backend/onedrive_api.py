@@ -263,4 +263,21 @@ def delete_file_batch(connection: CloudConnection, db: Session, file_ids: List[s
                 "success": 200 <= res["status"] < 300
             })
 
-    return all_results 
+    return all_results
+
+def get_onedrive_storage_quota(connection: CloudConnection, db: Session) -> Dict[str, Any]:
+    """
+    Fetches the user's OneDrive storage quota (total, used, remaining) from Microsoft Graph API.
+    """
+    graph_url = f"{GRAPH_API_BASE_URL}/me/drive"
+    resp = _make_graph_api_request("GET", graph_url, connection, db)
+    if resp.status_code != 200:
+        error_detail = resp.json().get('error', {}).get('message', resp.text)
+        raise HTTPException(status_code=resp.status_code, detail=f"Failed to fetch storage quota: {error_detail}")
+    data = resp.json()
+    quota = data.get('quota', {})
+    return {
+        'total': quota.get('total', 0),
+        'used': quota.get('used', 0),
+        'remaining': quota.get('remaining', 0),
+    } 
