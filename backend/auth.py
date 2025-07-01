@@ -8,9 +8,12 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
+import warnings
 
 # Secret key for JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+if SECRET_KEY == "supersecretkey":
+    warnings.warn("[SECURITY WARNING] Using default SECRET_KEY! Set a strong, random SECRET_KEY in backend/.env for production.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week
 

@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, Body, status
+from fastapi import APIRouter, Depends, Body, status, Request
 from sqlalchemy.orm import Session
 from services.auth_service import register_user_service, login_for_access_token_service, read_users_me_service
 from database import get_db
 from auth import get_current_user
 from models import User, UserSchema
 from pydantic import BaseModel, EmailStr
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
+
+limiter = Limiter(key_func=get_remote_address)
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -14,11 +18,13 @@ class UserCreate(BaseModel):
     name: str = ""
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register_user(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     return register_user_service(user, db)
 
 @router.post("/auth/token")
-def login_for_access_token(form_data: dict = Body(...), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login_for_access_token(request: Request, form_data: dict = Body(...), db: Session = Depends(get_db)):
     return login_for_access_token_service(form_data, db)
 
 @router.get("/auth/me", response_model=UserSchema)

@@ -1,267 +1,196 @@
-# Declutter Cloud Deployment Guide
+# Declutter Cloud: Production Deployment Guide
 
-This guide provides step-by-step instructions for deploying the Declutter Cloud full-stack application. The application consists of a React frontend and a FastAPI backend.
+## Overview
+This guide covers the production deployment of Declutter Cloud, including all security hardening, performance optimizations, and operational considerations.
 
-## Prerequisites
+## Security Features Implemented
 
-- **Cloud Hosting**: A server or platform to host the backend (e.g., Heroku, AWS, DigitalOcean) and a service to host the static frontend (e.g., Netlify, Vercel, AWS S3).
-- **Database**: A PostgreSQL or other SQLAlchemy-compatible database for production.
-- **Node.js and Python**: Installed on your deployment machine.
-- **Git**: For version control.
+### 1. Authentication & Authorization
+- **JWT-based authentication** with configurable expiry
+- **Rate limiting** on sensitive endpoints:
+  - Authentication: 5/minute (production), 10/minute (staging)
+  - File deletion: 20/minute (production), 30/minute (staging)
+- **Input validation** using Pydantic models
+- **Input sanitization** middleware for XSS prevention
 
-## 1. Environment Variable Configuration
+### 2. API Security
+- **CORS protection** with environment-specific origins
+- **Secure HTTP headers** via custom middleware
+- **Error handling** that doesn't leak sensitive information
+- **Request/response compression** for performance
 
-Create a `.env` file in the `backend` directory. This file will store all your secrets and configuration variables. **Do not commit this file to version control.**
+### 3. Database Security
+- **Connection pooling** with environment-specific settings
+- **Connection validation** with `pool_pre_ping`
+- **Connection recycling** every hour
+- **SQL injection protection** via SQLAlchemy ORM
 
-```
-# backend/.env
-
-# Application Secret Key (generate a new random key for production)
-SECRET_KEY="a_very_strong_and_random_secret_key"
-
-# Database URL
-# Example for PostgreSQL: DATABASE_URL="postgresql://user:password@host:port/dbname"
-DATABASE_URL="your_production_database_url"
-
-# Microsoft / OneDrive Credentials
-MICROSOFT_CLIENT_ID="your_microsoft_client_id"
-MICROSOFT_CLIENT_SECRET="your_microsoft_client_secret"
-MICROSOFT_REDIRECT_URI="https://your-backend-domain.com/auth/onedrive/callback"
-
-# Google / Google Drive Credentials
-GOOGLE_CLIENT_ID="your_google_client_id"
-GOOGLE_CLIENT_SECRET="your_google_client_secret"
-GOOGLE_REDIRECT_URI="https://your-backend-domain.com/auth/google/callback"
-
-# Set to True for production debugging if needed
-DEBUG="False"
-```
-
-## 2. Cloud Provider Setup (Azure & Google)
-
-You must configure your redirect URIs in both the Azure Portal and Google Cloud Console to match your production domain.
-
-### Microsoft Azure (for OneDrive)
-1.  Navigate to **Azure Active Directory > App registrations** and select your application.
-2.  Go to the **Authentication** tab.
-3.  Under **Web > Redirect URIs**, add the production URI: `https://your-backend-domain.com/auth/onedrive/callback`.
-4.  Ensure you have configured a client secret and have the Application (client) ID.
-
-### Google Cloud Platform (for Google Drive)
-1.  Navigate to **APIs & Services > Credentials**.
-2.  Select your OAuth 2.0 Client ID.
-3.  Under **Authorized redirect URIs**, add the production URI: `https://your-backend-domain.com/auth/google/callback`.
-4.  Ensure you have the Client ID and Client Secret.
-
-## 3. Backend Deployment (Example with Heroku)
-
-1.  **Procfile**: A `Procfile` is already included in the `backend` directory to run the application using `gunicorn`.
-    ```
-    web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.main:app
-    ```
-2.  **Install Gunicorn**: Add `gunicorn` to your `backend/requirements.txt`.
-3.  **Push to Heroku**:
-    ```bash
-    heroku create your-app-name
-    heroku git:remote -a your-app-name
-    git push heroku main
-    ```
-4.  **Configure Environment Variables**:
-    - Go to your Heroku app's dashboard > Settings > Config Vars.
-    - Add all the key-value pairs from your `.env` file.
-
-## 4. Frontend Deployment (Example with Netlify)
-
-1.  **Update API Base URL**: In your frontend code, ensure all API requests point to your production backend URL. You might need to change the Vite proxy setup for a production build. The easiest way is to set a base URL for `fetch`.
-    - In `frontend/vite.config.ts`, the proxy is for development only. For production, the frontend will be built into static files.
-    - In your frontend code (e.g., a central `api.ts` file or directly in components), API calls should use the full backend URL: `https://your-backend-domain.com/api/...`
-
-2.  **Build the Frontend**:
-    ```bash
-    cd frontend
-    npm install
-    npm run build
-    ```
-    This will create a `dist` directory with your static application.
-
-3.  **Deploy to Netlify**:
-    - Sign up for Netlify and connect your Git repository.
-    - Set the build command to `npm run build`.
-    - Set the publish directory to `frontend/dist`.
-    - Add any necessary environment variables for the build process (e.g., `VITE_API_BASE_URL=https://your-backend-domain.com`).
-
-## 5. Final Checks
-
-- **CORS**: Ensure your FastAPI backend is configured to accept requests from your frontend's production domain. You may need to update the `CORSMiddleware` settings in `backend/main.py`.
-- **Database Migrations**: If you are using a relational database, run your Alembic migrations to set up the schema. `alembic upgrade head`
-- **Testing**: Thoroughly test the login, cloud connection, and file management features in the production environment.
-
-## ✅ Pre-deployment Checklist
-
-- [x] **Dependencies Updated**: All packages updated to latest versions (FastAPI 0.115.13, Uvicorn 0.34.3)
-- [x] **API Enhanced**: Added proper metadata, tags, and documentation
-- [x] **CORS Configured**: Backend allows cross-origin requests
-- [x] **Environment Variables**: Frontend configured to use production API URL
-- [x] **Build Tested**: Both frontend and backend build successfully
-
-## 🚀 Quick Deploy Options
-
-### Option 1: Railway (Recommended - Easiest)
-
-**Free Tier**: $5/month credit (sufficient for small apps)
-
-#### Steps:
-1. **Push to GitHub**:
-   ```bash
-   git add .
-   git commit -m "Ready for deployment"
-   git push origin main
-   ```
-
-2. **Deploy on Railway**:
-   - Go to [railway.app](https://railway.app)
-   - Sign up with GitHub
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Select your repository
-   - Add environment variables:
-     ```
-     MICROSOFT_CLIENT_ID=your_client_id
-     MICROSOFT_CLIENT_SECRET=your_client_secret
-     MICROSOFT_REDIRECT_URI=https://your-app.railway.app/auth/onedrive/callback
-     ```
-   - Deploy!
-
-3. **Update Frontend**:
-   - Create new project for frontend
-   - Set build command: `npm run build`
-   - Set output directory: `dist`
-   - Add environment variable: `VITE_API_URL=https://your-backend.railway.app`
-
-### Option 2: Render
-
-**Free Tier**: 750 hours/month for backend, unlimited static sites
-
-#### Backend Setup:
-1. Go to [render.com](https://render.com)
-2. Create new Web Service
-3. Connect GitHub repository
-4. Configure:
-   - **Build Command**: `pip install -r backend/requirements.txt`
-   - **Start Command**: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Environment Variables**: Same as Railway
-
-#### Frontend Setup:
-1. Create new Static Site
-2. Configure:
-   - **Build Command**: `npm run build`
-   - **Publish Directory**: `dist`
-   - **Environment Variable**: `VITE_API_URL=https://your-backend.onrender.com`
-
-### Option 3: Vercel (Frontend) + Railway (Backend)
-
-**Vercel Free**: Unlimited deployments
-
-#### Frontend on Vercel:
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-cd frontend
-vercel
-
-# Set environment variable
-vercel env add VITE_API_URL
-```
-
-## 🔧 Environment Variables
-
-Set these in your cloud platform:
-
-```bash
-# OneDrive OAuth
-MICROSOFT_CLIENT_ID=your_microsoft_app_client_id
-MICROSOFT_CLIENT_SECRET=your_microsoft_app_client_secret
-MICROSOFT_REDIRECT_URI=https://your-backend-domain/auth/onedrive/callback
-
-# Frontend
-VITE_API_URL=https://your-backend-domain
-```
-
-## 📝 Microsoft App Registration
-
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Create new App Registration
-3. Add redirect URI: `https://your-backend-domain/auth/onedrive/callback`
-4. Copy Client ID and Secret
-
-## 🐛 Common Issues
-
-### CORS Errors
-- Backend has CORS configured for all origins
-- In production, update `allow_origins` in `main.py` with your frontend URL
+## Environment Configuration
 
 ### Environment Variables
-- Ensure all variables are set in your cloud platform
-- Check that `MICROSOFT_REDIRECT_URI` matches your deployed backend URL
+```bash
+# Required
+SECRET_KEY=your-secure-secret-key
+DATABASE_URL=postgresql://user:pass@host:port/db
+ENVIRONMENT=production
 
-### Build Failures
-- Check that `requirements.txt` has all dependencies
-- Ensure Node.js version is compatible (v16+)
+# Optional
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=10080
+JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
+MAX_FILE_SIZE=100
+ALLOWED_FILE_TYPES=image/*,application/pdf,text/*
+```
 
-## 🔄 Continuous Deployment
+### Environment-Specific Settings
+- **Development**: Debug enabled, relaxed rate limits, local CORS
+- **Staging**: Debug disabled, moderate rate limits, staging CORS
+- **Production**: Debug disabled, strict rate limits, production CORS
 
-All platforms support automatic deployments:
-- Push to `main` branch triggers deployment
-- Environment variables persist across deployments
-- Rollback to previous versions if needed
+## Health Checks & Monitoring
 
-## 💰 Cost Optimization
+### Endpoints
+- `GET /health` - Application health check
+- `GET /ready` - Database connectivity check
 
-### Railway
-- Monitor usage in dashboard
-- $5 credit usually lasts for small apps
-- Scale down when not in use
+### Security Logging
+The application logs:
+- Authentication attempts (successful and failed)
+- File deletion operations
+- Database errors
+- Rate limit violations
+- Security-relevant HTTP errors
 
-### Render
-- Free tier has 750 hours/month
-- Service sleeps after 15 minutes of inactivity
-- Wake up takes ~30 seconds
+## Database Configuration
 
-### Vercel
-- Completely free for personal projects
-- Unlimited deployments and bandwidth
+### Connection Pool Settings
+- **Production**: 20 connections, 30 overflow, 30s timeout
+- **Staging**: 10 connections, 20 overflow, 30s timeout
+- **Development**: 5 connections, 10 overflow, 30s timeout
 
-## 🚀 Production Checklist
+### Backup Strategy
+Use the provided backup script:
+```bash
+cd backend/scripts
+bash backup_db.sh
+```
 
-- [ ] Environment variables configured
-- [ ] Microsoft App redirect URI updated
-- [ ] Frontend API URL set correctly
-- [ ] CORS origins updated for production
-- [ ] SSL certificates enabled (automatic on most platforms)
-- [ ] Custom domain configured (optional)
+Schedule regular backups with cron:
+```bash
+# Daily backup at 2 AM
+0 2 * * * cd /path/to/declutter-cloud/backend/scripts && bash backup_db.sh
+```
 
-## 📊 Monitoring
+## Performance Optimizations
 
-Most platforms provide:
-- Request logs
-- Error tracking
-- Performance metrics
-- Uptime monitoring
+### 1. Database
+- Connection pooling with pre-ping validation
+- Connection recycling to prevent stale connections
+- Optimized pool sizes per environment
 
-## 🔒 Security Notes
+### 2. API
+- Gzip compression for responses > 1KB
+- Input sanitization to prevent processing overhead
+- Rate limiting to prevent abuse
 
-- Never commit secrets to Git
-- Use environment variables for all sensitive data
-- Enable HTTPS (automatic on most platforms)
-- Consider rate limiting for production use
+### 3. Security
+- Efficient JWT validation
+- Minimal overhead security middleware
+- Optimized error handling
 
-## 🆘 Support
+## Deployment Checklist
 
-- **Railway**: Discord community
-- **Render**: Documentation and forums
-- **Vercel**: Excellent documentation and support
+### Pre-Deployment
+- [ ] Set `ENVIRONMENT=production` in environment variables
+- [ ] Configure production `DATABASE_URL`
+- [ ] Set secure `SECRET_KEY`
+- [ ] Update CORS origins for production domain
+- [ ] Configure production rate limits
+- [ ] Set up database backups
+
+### Deployment
+- [ ] Install dependencies: `pip install -r requirements.txt`
+- [ ] Run database migrations: `alembic upgrade head`
+- [ ] Test health endpoints: `/health` and `/ready`
+- [ ] Verify security headers are present
+- [ ] Test rate limiting on sensitive endpoints
+
+### Post-Deployment
+- [ ] Monitor application logs for errors
+- [ ] Verify database connection pool is working
+- [ ] Test backup script functionality
+- [ ] Monitor rate limiting effectiveness
+- [ ] Verify CORS is working correctly
+
+## Security Monitoring
+
+### Log Analysis
+Monitor these log patterns:
+- Failed authentication attempts
+- Rate limit violations
+- Database connection errors
+- Unexpected exceptions
+
+### Alerts
+Set up alerts for:
+- High error rates (>5% of requests)
+- Database connection pool exhaustion
+- Rate limit violations
+- Failed health checks
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Errors**
+   - Check `DATABASE_URL` format
+   - Verify database is accessible
+   - Check connection pool settings
+
+2. **Rate Limiting Issues**
+   - Verify client IP detection
+   - Check rate limit configuration
+   - Monitor for legitimate traffic being blocked
+
+3. **CORS Errors**
+   - Verify frontend domain is in `CORS_ORIGINS`
+   - Check for protocol mismatches (http vs https)
+
+4. **Performance Issues**
+   - Monitor database connection pool usage
+   - Check for slow queries
+   - Verify compression is working
+
+### Debug Mode
+For troubleshooting, temporarily enable debug mode:
+```bash
+export ENVIRONMENT=development
+export DEBUG=true
+```
+
+## Maintenance
+
+### Regular Tasks
+- Monitor and rotate logs
+- Review security logs for suspicious activity
+- Update dependencies for security patches
+- Test backup and restore procedures
+- Review rate limiting effectiveness
+
+### Updates
+- Test all changes in staging environment
+- Use blue-green deployment for zero downtime
+- Monitor health endpoints during updates
+- Have rollback plan ready
+
+## Support
+
+For issues or questions:
+- Check application logs first
+- Verify environment configuration
+- Test with health endpoints
+- Review this deployment guide
 
 ---
 
-**Recommended for beginners**: Start with Railway for both frontend and backend. It's the easiest to set up and has good free tier limits. 
+**Last Updated**: January 2025
+**Version**: 1.0.0 

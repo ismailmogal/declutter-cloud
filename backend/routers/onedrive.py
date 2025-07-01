@@ -18,8 +18,16 @@ from config import debug_log
 from auth import get_current_user
 from models import User, CloudConnection
 from onedrive_api import get_onedrive_storage_quota
+from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
+
+limiter = Limiter(key_func=get_remote_address)
+
+class DeleteFilesRequest(BaseModel):
+    file_ids: List[str]
 
 @router.get("/api/onedrive/files")
 def get_files(
@@ -28,7 +36,7 @@ def get_files(
     db: Session = Depends(get_db)
 ):
     debug_log(f"Getting OneDrive files for user {current_user.id}, folder_id: {folder_id}")
-    return get_onedrive_files_service(current_user, db, folder_id)
+    return get_onedrive_files_service(current_user, db, folder_id or "root")
 
 @router.post("/api/onedrive/duplicates")
 def get_duplicates(
@@ -42,17 +50,18 @@ def get_duplicates(
     return get_onedrive_duplicates_service(current_user, db, folder_ids, recursive)
 
 @router.post("/api/onedrive/delete_files")
+@limiter.limit("30/minute")
 def delete_files(
-    payload: Dict[str, List[str]] = Body(...),
+    request: Request,
+    payload: DeleteFilesRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    file_ids = payload.get("file_ids", [])
-    if not file_ids:
+    if not payload.file_ids:
         raise HTTPException(status_code=400, detail="No file_ids provided for deletion.")
     
-    debug_log(f"Deleting files {file_ids} for user {current_user.id}")
-    return delete_files_service(current_user, db, file_ids)
+    debug_log(f"Deleting files {payload.file_ids} for user {current_user.id}")
+    return delete_files_service(current_user, db, payload.file_ids)
 
 @router.post("/api/onedrive/smart_organise")
 def smart_organise(

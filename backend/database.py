@@ -5,6 +5,7 @@ import os
 from sqlalchemy.pool import QueuePool
 from dotenv import load_dotenv
 import logging
+from config import DB_POOL_SIZE, DB_MAX_OVERFLOW, DB_POOL_TIMEOUT
 
 # Enable SQLAlchemy pool logging for monitoring
 logging.basicConfig()
@@ -25,20 +26,24 @@ print("[DB DEBUG] Using DATABASE_URL:", DATABASE_URL)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-if "sqlite" in DATABASE_URL:
+# Configure connection pooling for production
+if DATABASE_URL.startswith("postgresql"):
     engine = create_engine(
         DATABASE_URL,
-        connect_args={"check_same_thread": False}
+        pool_size=DB_POOL_SIZE,
+        max_overflow=DB_MAX_OVERFLOW,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        pool_timeout=DB_POOL_TIMEOUT,
+        echo=False
     )
 else:
-    # Production: Use connection pooling for PostgreSQL
+    # SQLite configuration
     engine = create_engine(
         DATABASE_URL,
-        poolclass=QueuePool,
-        pool_size=10,         # Number of connections to keep in the pool
-        max_overflow=20,      # Number of connections to allow in overflow
-        pool_timeout=30,      # Seconds to wait before giving up on getting a connection
-        pool_recycle=1800     # Recycle connections after 30 minutes
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+        pool_recycle=3600
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
