@@ -110,12 +110,15 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
+# CORS setup
+origins = [
+    "https://declutter-cloud-1.onrender.com",  # deployed frontend
+    "http://localhost:5173",                   # local dev
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Local frontend
-        "https://your-frontend-domain.com"  # TODO: Set your production frontend domain
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
