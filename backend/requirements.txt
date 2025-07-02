@@ -10,7 +10,6 @@ charset-normalizer==3.4.2
 click==8.2.1
 cryptography==45.0.4
 cyclonedx-python-lib==9.1.0
-declutter-cloud @ file:///Users/ismogal/declutter-cloud
 defusedxml==0.7.1
 Deprecated==1.2.18
 dnspython==2.7.0
@@ -71,3 +70,9 @@ uvloop==0.21.0
 watchfiles==1.1.0
 websockets==15.0.1
 wrapt==1.17.2
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+google-api-core
+googleapis-common-protos
