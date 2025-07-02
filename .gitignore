@@ -9,6 +9,8 @@ __pycache__/
 venv/
 backend/venv/
 backend/.pytest_cache/
+backend/routers/__pycache__
+backend/services/__pycache__ 
 
 # Alembic (ignore entire directory, except migration scripts if needed)
 backend/alembic/
