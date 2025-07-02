@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Box, CircularProgress, Alert, Toolbar, Modal,
@@ -6,22 +6,24 @@ import {
 } from '@mui/material';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 
-import HomePage from './pages/HomePage';
-import MyFiles from './pages/MyFiles';
-import Compare from './pages/Compare';
-import SmartOrganiser from './pages/SmartOrganiser';
-import SettingsPage from './pages/Settings';
-import Help from './components/Help';
 import Footer from './components/Footer';
 import Support from './components/Support';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import apiClient from './api/api';
 import { storeToken } from './utils/idbCache';
-import CrossCloudDuplicates from './components/CrossCloudDuplicates';
-import SecurityPage from './pages/Security';
-import PrivacyPage from './pages/Privacy';
-import TermsPage from './pages/Terms';
+import { lazy } from 'react';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const MyFiles = lazy(() => import('./pages/MyFiles'));
+const Compare = lazy(() => import('./pages/Compare'));
+const SmartOrganiser = lazy(() => import('./pages/SmartOrganiser'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const Help = lazy(() => import('./components/Help'));
+const CrossCloudDuplicates = lazy(() => import('./components/CrossCloudDuplicates'));
+const SecurityPage = lazy(() => import('./pages/Security'));
+const PrivacyPage = lazy(() => import('./pages/Privacy'));
+const TermsPage = lazy(() => import('./pages/Terms'));
 
 const App: React.FC = () => (
   <AuthProvider>
@@ -54,18 +56,20 @@ const MainApp: React.FC = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
-          <Route path="/security" element={<SecurityPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          {isAuthenticated ? (
-            <Route path="/*" element={
-              <LoggedInApp onLogout={logout} themeMode={themeMode} setThemeMode={setThemeMode} />
-            } />
-          ) : (
-            <Route path="/*" element={<HomePage onLoginSuccess={() => { window.location.reload(); }} />} />
-          )}
-        </Routes>
+        <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
+          <Routes>
+            <Route path="/security" element={<SecurityPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            {isAuthenticated ? (
+              <Route path="/*" element={
+                <LoggedInApp onLogout={logout} themeMode={themeMode} setThemeMode={setThemeMode} />
+              } />
+            ) : (
+              <Route path="/*" element={<HomePage onLoginSuccess={() => { window.location.reload(); }} />} />
+            )}
+          </Routes>
+        </Suspense>
       </Router>
     </ThemeProvider>
   );
@@ -116,15 +120,17 @@ const LoggedInApp = ({ onLogout, themeMode, setThemeMode }: { onLogout: () => vo
         <Sidebar />
         <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default' }}>
           <Toolbar />
-          <Routes>
-            <Route path="/files" element={<MyFiles />} />
-            <Route path="/compare" element={<Compare />} />
-            <Route path="/smart-organiser" element={<SmartOrganiser />} />
-            <Route path="/settings" element={<SettingsPage themeMode={themeMode} setThemeMode={setThemeMode} />} />
-            <Route path="/help" element={<Help />} />
-            <Route path="/cross-cloud-duplicates" element={<CrossCloudDuplicates />} />
-            <Route path="*" element={<Navigate to="/files" />} />
-          </Routes>
+          <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>}>
+            <Routes>
+              <Route path="/files" element={<MyFiles />} />
+              <Route path="/compare" element={<Compare />} />
+              <Route path="/smart-organiser" element={<SmartOrganiser />} />
+              <Route path="/settings" element={<SettingsPage themeMode={themeMode} setThemeMode={setThemeMode} />} />
+              <Route path="/help" element={<Help />} />
+              <Route path="/cross-cloud-duplicates" element={<CrossCloudDuplicates />} />
+              <Route path="*" element={<Navigate to="/files" />} />
+            </Routes>
+          </Suspense>
         </Box>
       </Box>
       <Footer onSupportClick={() => setIsSupportModalOpen(true)} />
