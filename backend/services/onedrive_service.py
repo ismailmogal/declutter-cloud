@@ -1,13 +1,14 @@
 import uuid
 from fastapi.responses import RedirectResponse
 from datetime import datetime, timezone
-from auth import decode_access_token
-from models import CloudConnection, User
+from backend.auth import decode_access_token
+from backend.models import CloudConnection, User
 import requests
 import os
-from config import MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_REDIRECT_URI, sessions, debug_log
+from backend.config import MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_REDIRECT_URI, sessions
+from backend.helpers import debug_log
 from fastapi import HTTPException
-from onedrive_api import get_onedrive_folder_contents, get_all_files_recursively, create_folder_if_not_exists, move_file, delete_file_batch, get_all_files_recursively_with_depth
+from backend.onedrive_api import get_onedrive_folder_contents, get_all_files_recursively, create_folder_if_not_exists, move_file, delete_file_batch, get_all_files_recursively_with_depth
 from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -163,8 +164,11 @@ def smart_organise_service(current_user: User, db: Session, options: Dict[str, A
     else:
         raise HTTPException(status_code=400, detail="Invalid organisation strategy")
 
-def start_onedrive_login(session_id, authorization, db, user_id_param=None):
-    debug_log(f"start_onedrive_login called with session_id: {session_id}, authorization: {authorization[:50] if authorization else 'None'}..., user_id_param: {user_id_param}")
+def start_onedrive_login(request, db, user_id=None, elevate=False):
+    # Extract session_id from query params and authorization from headers
+    session_id = request.query_params.get("session_id")
+    authorization = request.headers.get("Authorization")
+    debug_log(f"start_onedrive_login called with session_id: {session_id}, authorization: {authorization[:50] if authorization else 'None'}..., user_id: {user_id}, elevate: {elevate}")
     user_id = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1]
@@ -174,10 +178,10 @@ def start_onedrive_login(session_id, authorization, db, user_id_param=None):
         user_id = int(payload["sub"]) if payload and "sub" in payload else None
         debug_log(f"Extracted user_id from token: {user_id}")
     
-    # If we couldn't get user_id from token, use the query parameter
-    if not user_id and user_id_param:
-        user_id = int(user_id_param)
-        debug_log(f"Using user_id from query parameter: {user_id}")
+    # If we couldn't get user_id from token, use the user_id argument
+    if user_id is None and user_id is not None:
+        user_id = int(user_id)
+        debug_log(f"Using user_id from argument: {user_id}")
     
     if not session_id or session_id not in sessions:
         session_id = f"session_{uuid.uuid4()}"
@@ -188,12 +192,17 @@ def start_onedrive_login(session_id, authorization, db, user_id_param=None):
         debug_log(f"Stored user_id {user_id} in session {session_id}")
     debug_log(f"Final session state: {sessions[session_id]}")
     debug_log("Generated new session_id:", session_id)
+    # Set scope based on elevate
+    if elevate:
+        scope = "Files.ReadWrite.All User.Read offline_access"
+    else:
+        scope = "Files.Read.All User.Read offline_access"
     params = {
         "client_id": MICROSOFT_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": MICROSOFT_REDIRECT_URI,
         "response_mode": "query",
-        "scope": "Files.ReadWrite.All offline_access",
+        "scope": scope,
         "state": session_id
     }
     url = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" + "&".join(f"{k}={v}" for k, v in params.items())
@@ -268,6 +277,7 @@ def handle_onedrive_callback(request, code, state, db):
         debug_log(f"Proceeding to create/update CloudConnection for user_id: {user.id}")
         # Now, for this user, create/update their CloudConnection
         connection = db.query(CloudConnection).filter_by(user_id=user.id, provider="onedrive").first()
+        granted_scopes = token_json.get("scope")
         if not connection:
             debug_log("No existing OneDrive connection found for this user. Creating new one.")
             connection = CloudConnection()
@@ -278,6 +288,7 @@ def handle_onedrive_callback(request, code, state, db):
             connection.provider_user_id = provider_user_id
             connection.provider_user_email = provider_user_email
             connection.is_active = True
+            connection.scopes = granted_scopes
             db.add(connection)
         else:
             debug_log("Existing OneDrive connection found. Updating tokens.")
@@ -286,6 +297,7 @@ def handle_onedrive_callback(request, code, state, db):
             connection.provider_user_id = provider_user_id
             connection.provider_user_email = provider_user_email
             connection.is_active = True
+            connection.scopes = granted_scopes
         db.commit()
         debug_log("Successfully committed CloudConnection to the database.")
 

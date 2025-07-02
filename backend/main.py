@@ -1,7 +1,9 @@
 from fastapi import FastAPI, status, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from routers import onedrive, cloud, auth_router, google, user, files, ai, analytics, rules, images
+from .routers import onedrive, cloud, auth_router, google, user, files, ai, analytics, rules, images
+from .routers.duplicates import router as duplicates_router
+from .routers.__init__ import router as feature_router
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response, JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -11,10 +13,11 @@ import logging
 from datetime import datetime
 from fastapi import Depends
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from database import get_db
+from backend.database import get_db
 import re
 import html
 import traceback
+from backend.routers.cloud import router as cloud_router
 
 # Configure security logging
 security_logger = logging.getLogger("security")
@@ -123,16 +126,18 @@ app.add_middleware(InputSanitizationMiddleware)
 app.add_middleware(SecurityLoggingMiddleware)
 app.add_middleware(SecureHeadersMiddleware)
 
-app.include_router(auth_router.router)
-app.include_router(onedrive.router)
-app.include_router(cloud.router)
-app.include_router(google.router)
-app.include_router(user.router)
-app.include_router(files.router)
-app.include_router(ai.router)
-app.include_router(analytics.router)
-app.include_router(rules.router)
-app.include_router(images.router)
+app.include_router(auth_router)
+app.include_router(onedrive)
+app.include_router(cloud_router)
+app.include_router(google)
+app.include_router(user)
+app.include_router(files)
+app.include_router(ai)
+app.include_router(analytics)
+app.include_router(rules)
+app.include_router(images)
+app.include_router(duplicates_router)
+app.include_router(feature_router)
 
 @app.get("/health", tags=["infra"])
 def health():

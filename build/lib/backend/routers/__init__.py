@@ -1,0 +1,11 @@
+from backend.routers.ai import router as ai
+from backend.routers.analytics import router as analytics
+from backend.routers.auth_router import router as auth_router
+from backend.routers.cloud import router as cloud
+from backend.routers.files import router as files
+from backend.routers.google import router as google
+from backend.routers.images import router as images
+from backend.routers.onedrive import router as onedrive
+from backend.routers.rules import router as rules
+from backend.routers.user import router as user
+from backend.routers.subscription import router as subscription 

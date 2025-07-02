@@ -62,3 +62,5 @@ backend/alembic/versions/__pycache__/
 # Remove deep __pycache__ ignores (handled by __pycache__/ above)
 # Remove duplicate lines
 podman-compose.yml
+
+business/

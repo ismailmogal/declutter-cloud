@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
-from services.user_service import get_me_service, change_password_service, ChangePasswordRequest, update_preferences_service
-from models import User, UserSchema
-from auth import get_current_user
-from database import get_db
+from backend.services.user_service import get_me_service, change_password_service, ChangePasswordRequest, update_preferences_service
+from backend.models import User, UserSchema
+from backend.auth import get_current_user
+from backend.database import get_db
 from typing import Dict, Any
+from backend.services.feature_gate_service import FeatureGateService, UsageTrackingService
+from backend.services.subscription_service import SubscriptionService
 
 router = APIRouter(
     prefix="/api/user",
     tags=["user"]
 )
+
+subscription_service = SubscriptionService()
+usage_tracking_service = UsageTrackingService()
+feature_gate_service = FeatureGateService(subscription_service, usage_tracking_service)
 
 @router.get("/me", response_model=UserSchema)
 def get_me(current_user: User = Depends(get_current_user)):

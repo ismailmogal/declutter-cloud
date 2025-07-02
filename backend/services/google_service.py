@@ -1,13 +1,17 @@
 from fastapi.responses import RedirectResponse
 from fastapi import HTTPException, Request
-from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, sessions, debug_log
-from urllib.parse import urlencode
+from backend.config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, sessions
+from backend.helpers import debug_log
+from urllib.parse import urlencode, quote
 import requests
-from models import CloudConnection, User
+from backend.models import CloudConnection, User
 from sqlalchemy.orm import Session
-from auth import decode_access_token
+from backend.auth import decode_access_token
 import uuid
 from datetime import datetime, timezone
+import os
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 def google_login_service(session_id, authorization, db: Session):
     debug_log("/auth/google/login called")
@@ -110,4 +114,165 @@ def google_callback_service(request: Request, code, db: Session):
 
     debug_log("Google login successful for user:", provider_user_email)
     frontend_url = f"http://localhost:5173/?session_id={state}"
-    return RedirectResponse(url=frontend_url) 
+    return RedirectResponse(url=frontend_url)
+
+def start_google_login(request: Request, db: Session, user_id: int, elevate=False):
+    state = f"{user_id}:{os.urandom(8).hex()}"
+    if elevate:
+        scopes = [
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    else:
+        scopes = [
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": " ".join(scopes),
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
+    return RedirectResponse(url=url)
+
+def handle_google_callback(request: Request, db: Session):
+    params = dict(request.query_params)
+    code = params.get("code")
+    state = params.get("state")
+    if not code:
+        return {"error": "No code in callback"}
+    # Exchange code for tokens
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    resp = requests.post(token_url, data=data)
+    if resp.status_code != 200:
+        return {"error": "Failed to get tokens", "details": resp.text}
+    tokens = resp.json()
+    access_token = tokens["access_token"]
+    refresh_token = tokens.get("refresh_token")
+    granted_scopes = tokens.get("scope")
+    # Get user info
+    userinfo_resp = requests.get(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    userinfo = userinfo_resp.json()
+    provider_user_email = userinfo.get("email")
+    provider_user_id = userinfo.get("id")
+    # Parse user_id from state
+    user_id = int(state.split(":")[0])
+    # Store in CloudConnection
+    connection = db.query(CloudConnection).filter_by(user_id=user_id, provider="googledrive").first()
+    if not connection:
+        connection = CloudConnection(
+            user_id=user_id,
+            provider="googledrive",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            provider_user_id=provider_user_id,
+            provider_user_email=provider_user_email,
+            is_active=True,
+            scopes=granted_scopes
+        )
+        db.add(connection)
+    else:
+        connection.access_token = access_token
+        connection.refresh_token = refresh_token or connection.refresh_token
+        connection.provider_user_id = provider_user_id
+        connection.provider_user_email = provider_user_email
+        connection.is_active = True
+        connection.scopes = granted_scopes
+    db.commit()
+    # Redirect to frontend
+    frontend_url = f"http://localhost:5173/settings?cloud=googledrive&status=success"
+    return RedirectResponse(url=frontend_url)
+
+def get_google_files_service(current_user, db, folder_id):
+    # 1. Get the user's Google CloudConnection
+    connection = db.query(CloudConnection).filter(
+        CloudConnection.user_id == current_user.id,
+        CloudConnection.provider == 'googledrive',
+        CloudConnection.is_active == True
+    ).first()
+
+    if not connection or not connection.access_token:
+        raise HTTPException(status_code=404, detail="Active Google Drive connection not found.")
+
+    # 2. Build Google Drive API client
+    creds = Credentials(
+        token=connection.access_token,
+        refresh_token=connection.refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=["https://www.googleapis.com/auth/drive.readonly"]
+    )
+    service = build('drive', 'v3', credentials=creds)
+
+    # 3. List files in the folder (with pagination)
+    files = []
+    page_token = None
+    while True:
+        query = f"'{folder_id}' in parents and trashed = false"
+        results = service.files().list(
+            q=query,
+            fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, iconLink, webViewLink, parents)",
+            pageToken=page_token
+        ).execute()
+        files.extend(results.get('files', []))
+        page_token = results.get('nextPageToken')
+        if not page_token:
+            break
+
+    # 4. Format files to match your frontend expectations
+    formatted_files = []
+    for f in files:
+        formatted_files.append({
+            "id": f["id"],
+            "name": f["name"],
+            "type": "folder" if f["mimeType"] == "application/vnd.google-apps.folder" else "file",
+            "size": int(f.get("size", 0)),
+            "modified": f.get("modifiedTime"),
+            "icon": f.get("iconLink"),
+            "webUrl": f.get("webViewLink"),
+        })
+
+    # 5. Optional: Build breadcrumbs (folder path)
+    path = []
+    current_id = folder_id
+    visited = set()
+    while current_id and current_id != 'root' and current_id not in visited:
+        visited.add(current_id)
+        meta = service.files().get(fileId=current_id, fields="id, name, parents").execute()
+        path.insert(0, {"id": meta["id"], "name": meta["name"]})
+        parents = meta.get("parents")
+        if parents:
+            current_id = parents[0]
+        else:
+            break
+    if folder_id == 'root':
+        path = []
+
+    return {
+        "files": formatted_files,
+        "folder_details": {"id": folder_id, "name": path[-1]["name"] if path else "Root", "path": path}
+    }
+
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "openid"
+] 
