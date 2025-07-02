@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -47,6 +47,9 @@ const Sidebar: React.FC = () => {
               </ListItemButton>
             </ListItem>
           ))}
+          <ListItem button component={Link} to="/cross-cloud-duplicates">
+            <ListItemText primary="Cross-Cloud Duplicates" />
+          </ListItem>
         </List>
       </Box>
     </Drawer>

@@ -4,6 +4,7 @@ import {
   Box, CircularProgress, Alert, Toolbar, Modal,
   ThemeProvider, createTheme, CssBaseline 
 } from '@mui/material';
+import { AuthProvider, useAuth } from './auth/AuthProvider';
 
 import HomePage from './pages/HomePage';
 import MyFiles from './pages/MyFiles';
@@ -16,34 +17,31 @@ import Support from './components/Support';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import apiClient from './api/api';
+import { storeToken } from './utils/idbCache';
+import CrossCloudDuplicates from './components/CrossCloudDuplicates';
+import SecurityPage from './pages/Security';
+import PrivacyPage from './pages/Privacy';
+import TermsPage from './pages/Terms';
 
-const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
+const App: React.FC = () => (
+  <AuthProvider>
+    <MainApp />
+  </AuthProvider>
+);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await apiClient.get('/api/user/me');
-        setIsAuthenticated(true);
-        if (res.data.preferences?.theme) {
-          setThemeMode(res.data.preferences.theme);
-        }
-      } catch (error) {
-        setIsAuthenticated(false);
-      }
-    };
-    checkAuth();
-  }, []);
+const MainApp: React.FC = () => {
+  const { isAuthenticated, user, logout } = useAuth();
+  const [themeMode, setThemeMode] = React.useState<'light' | 'dark'>('light');
 
-  const handleLoginSuccess = () => setIsAuthenticated(true);
-  const handleLogout = () => setIsAuthenticated(false);
+  React.useEffect(() => {
+    if (user && user.preferences?.theme) {
+      setThemeMode(user.preferences.theme);
+    }
+  }, [user]);
 
-  const theme = useMemo(() =>
+  const theme = React.useMemo(() =>
     createTheme({
-      palette: {
-        mode: themeMode,
-      },
+      palette: { mode: themeMode },
     }),
     [themeMode]
   );
@@ -56,9 +54,18 @@ const App: React.FC = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        {isAuthenticated 
-          ? <LoggedInApp onLogout={handleLogout} themeMode={themeMode} setThemeMode={setThemeMode} /> 
-          : <HomePage onLoginSuccess={handleLoginSuccess} />}
+        <Routes>
+          <Route path="/security" element={<SecurityPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          {isAuthenticated ? (
+            <Route path="/*" element={
+              <LoggedInApp onLogout={logout} themeMode={themeMode} setThemeMode={setThemeMode} />
+            } />
+          ) : (
+            <Route path="/*" element={<HomePage onLoginSuccess={() => { window.location.reload(); }} />} />
+          )}
+        </Routes>
       </Router>
     </ThemeProvider>
   );
@@ -115,6 +122,7 @@ const LoggedInApp = ({ onLogout, themeMode, setThemeMode }: { onLogout: () => vo
             <Route path="/smart-organiser" element={<SmartOrganiser />} />
             <Route path="/settings" element={<SettingsPage themeMode={themeMode} setThemeMode={setThemeMode} />} />
             <Route path="/help" element={<Help />} />
+            <Route path="/cross-cloud-duplicates" element={<CrossCloudDuplicates />} />
             <Route path="*" element={<Navigate to="/files" />} />
           </Routes>
         </Box>

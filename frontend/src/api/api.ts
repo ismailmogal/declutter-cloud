@@ -16,4 +16,20 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Global 401 handler
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      // Option 1: Redirect to login page
+      window.location.href = '/';
+      // Option 2: Show a login modal or notification (customize as needed)
+      // alert('Session expired. Please log in again.');
+      // Optionally clear token
+      localStorage.removeItem('token');
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient; 

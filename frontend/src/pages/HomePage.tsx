@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Button, Container, Typography, Paper } from '@mui/material';
 import AuthModal from '../components/AuthModal';
 import Logo from '../components/Logo';
+import { Link as RouterLink } from 'react-router-dom';
 
 interface HomePageProps {
   onLoginSuccess: () => void;
@@ -83,6 +84,26 @@ const HomePage: React.FC<HomePageProps> = ({ onLoginSuccess }) => {
               title="Smart Organization"
               description="Create custom rules to automatically sort, tag, or delete files based on your criteria."
             />
+          </Box>
+
+          {/* Security & Trust Section */}
+          <Box sx={{ mt: 8, mb: 6, p: 4, bgcolor: 'white', borderRadius: 2, boxShadow: 2, maxWidth: 800, mx: 'auto', textAlign: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
+              Your Security & Privacy Come First
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              We use industry-standard OAuth and never store your files. Your privacy and trust are our top priorities.
+            </Typography>
+            <Button
+              variant="outlined"
+              color="primary"
+              href="/security"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ mt: 1 }}
+            >
+              Learn more
+            </Button>
           </Box>
 
           {/* Footer */}

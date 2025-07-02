@@ -19,6 +19,8 @@ import {
 import { Visibility, VisibilityOff, Google, Microsoft } from '@mui/icons-material';
 import { getSessionId } from '../utils/sessionId';
 import apiClient from '../api/api';
+import { set as setIDB } from 'idb-keyval';
+import { storeToken } from '../utils/idbCache';
 
 interface AuthModalProps {
   open: boolean;
@@ -52,7 +54,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onClose, onSuccess }) => {
         }
         
         if (data.access_token) {
-          localStorage.setItem('token', data.access_token);
+          storeToken(data.access_token);
           onSuccess();
         }
 

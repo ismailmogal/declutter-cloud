@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, CircularProgress, Alert, Button, Checkbox, Toolbar, TextField, Paper } from '@mui/material';
+import { Box, Typography, CircularProgress, Alert, Button, Checkbox, Toolbar, TextField, Paper, Tabs, Tab, Breadcrumbs, IconButton } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import FileBrowser from '../components/FileBrowser';
 import apiClient from '../api/api';
 import { getCachedFiles, cacheFiles } from '../utils/idbCache';
-import { Search } from '@mui/icons-material';
+import { Search, Cloud as CloudIcon, Google as GoogleIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+
+const PROVIDERS = [
+  { key: 'onedrive', label: 'OneDrive', icon: <CloudIcon /> },
+  { key: 'google', label: 'Google Drive', icon: <GoogleIcon /> },
+  { key: 'googlephotos', label: 'Google Photos', icon: <PhotoLibraryIcon /> },
+];
 
 const MyFiles: React.FC = () => {
   const [files, setFiles] = useState<any[]>([]);
@@ -14,28 +21,46 @@ const MyFiles: React.FC = () => {
   const [breadcrumbs, setBreadcrumbs] = useState<any[]>([]);
   const [selectedFolders, setSelectedFolders] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState('onedrive');
   const navigate = useNavigate();
   
   const fetchFiles = useCallback(async (folderId: string | null = 'root', forceRefresh = false) => {
     setLoading(true);
     setError(null);
     const effectiveFolderId = folderId || 'root';
+    const cacheKey = `${selectedProvider}_${effectiveFolderId}`;
 
     try {
       let filesData: any[] = [];
       if (!forceRefresh) {
-        filesData = await getCachedFiles(effectiveFolderId);
+        filesData = await getCachedFiles(cacheKey);
       }
 
       if (forceRefresh || filesData.length === 0) {
-        const response = await apiClient.get(`/api/onedrive/files?folder_id=${effectiveFolderId}`);
-        filesData = response.data.files || [];
-        await cacheFiles(effectiveFolderId, filesData);
+        if (selectedProvider === 'google') {
+          const response = await apiClient.get(`/api/${selectedProvider}/files?folder_id=${effectiveFolderId}`);
+          filesData = response.data.files || [];
+          await cacheFiles(cacheKey, filesData);
 
-        if (response.data.folder_details) {
-          setBreadcrumbs(response.data.folder_details.path || []);
-        } else {
+          if (response.data.folder_details) {
+            setBreadcrumbs(response.data.folder_details.path || []);
+          } else {
+            setBreadcrumbs([]);
+          }
+        } else if (selectedProvider === 'googlephotos') {
+          const response = await apiClient.get('/api/googlephotos/files');
+          filesData = response.data.files || [];
           setBreadcrumbs([]);
+        } else {
+          const response = await apiClient.get(`/api/${selectedProvider}/files?folder_id=${effectiveFolderId}`);
+          filesData = response.data.files || [];
+          await cacheFiles(cacheKey, filesData);
+
+          if (response.data.folder_details) {
+            setBreadcrumbs(response.data.folder_details.path || []);
+          } else {
+            setBreadcrumbs([]);
+          }
         }
       }
       setFiles(filesData);
@@ -44,11 +69,14 @@ const MyFiles: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedProvider]);
 
   useEffect(() => {
     fetchFiles();
-  }, [fetchFiles]);
+    setCurrentFolder(null);
+    setBreadcrumbs([]);
+    setSelectedFolders({});
+  }, [fetchFiles, selectedProvider]);
   
   const handleFolderClick = (folder: any) => {
     setCurrentFolder(folder);
@@ -60,10 +88,6 @@ const MyFiles: React.FC = () => {
     if(crumb.id === 'root') {
       setCurrentFolder(null);
       setBreadcrumbs([]);
-    } else {
-      // In a more robust implementation, we might get the full crumb object
-      // and update the current folder and breadcrumb trail from it.
-      // For now, fetching re-calculates the breadcrumbs.
     }
   };
   
@@ -90,6 +114,13 @@ const MyFiles: React.FC = () => {
 
   const numSelected = Object.keys(selectedFolders).length;
 
+  const handleProviderChange = (event: React.SyntheticEvent, newValue: string) => {
+    setSelectedProvider(newValue);
+  };
+
+  // Breadcrumbs for UI
+  const allBreadcrumbs = [{id: 'root', name: 'Root', path: '/'}].concat(breadcrumbs);
+
   if (loading && files.length === 0) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
   }
@@ -99,24 +130,40 @@ const MyFiles: React.FC = () => {
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-        <Paper elevation={3} sx={{ p: 1.5, borderRadius: 3, minWidth: 350, maxWidth: 500, width: '100%', display: 'flex', alignItems: 'center' }}>
-          <Search sx={{ mr: 1, color: 'text.secondary' }} />
-          <TextField
-            fullWidth
-            size="small"
-            variant="outlined"
-            placeholder="Search everything (name, tags, ... )"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            InputProps={{
-              disableUnderline: true,
-              sx: { borderRadius: 2, bgcolor: 'background.paper' }
-            }}
-          />
-        </Paper>
-      </Box>
+    <Box sx={{ p: 2 }}>
+      <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+        <Tabs value={selectedProvider} onChange={handleProviderChange} sx={{ mb: 1 }}>
+          {PROVIDERS.map(p => (
+            <Tab key={p.key} value={p.key} label={p.label} icon={p.icon} />
+          ))}
+        </Tabs>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+          <Breadcrumbs aria-label="breadcrumb">
+            {allBreadcrumbs.map((crumb, idx) => (
+              <Typography
+                key={crumb.id}
+                color={idx === allBreadcrumbs.length - 1 ? 'text.primary' : 'inherit'}
+                sx={{ cursor: idx === allBreadcrumbs.length - 1 ? 'default' : 'pointer' }}
+                onClick={() => idx !== allBreadcrumbs.length - 1 && handleBreadcrumbClick(crumb)}
+              >
+                {crumb.name}
+              </Typography>
+            ))}
+          </Breadcrumbs>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TextField
+              size="small"
+              placeholder="Search everything (name, tags, ... )"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              InputProps={{
+                sx: { borderRadius: 2, bgcolor: 'background.paper', width: 350, fontSize: 18 }
+              }}
+            />
+            <IconButton onClick={handleRefresh}><RefreshIcon /></IconButton>
+          </Box>
+        </Box>
+      </Paper>
       {numSelected > 0 && (
         <Toolbar sx={{ bgcolor: 'action.selected', mb: 2, borderRadius: 1 }}>
           <Typography sx={{ flex: '1 1 100%' }} variant="h6">
@@ -127,21 +174,49 @@ const MyFiles: React.FC = () => {
           </Button>
         </Toolbar>
       )}
-      <FileBrowser
-        files={files}
-        onFolderClick={handleFolderClick}
-        onRefresh={handleRefresh}
-        breadcrumbs={[{id: 'root', name: 'Root', path: '/'}, ...breadcrumbs]}
-        onBreadcrumbClick={handleBreadcrumbClick}
-        loading={loading}
-        error={error}
-        onFileClick={() => {}}
-        onAddFoldersToCompare={() => {}}
-        currentPath={currentFolder?.path || ''}
-        selectedFolders={selectedFolders}
-        onSelectFolder={handleSelectFolder}
-        searchTerm={searchTerm}
-      />
+      {selectedProvider === 'googlephotos' ? (
+        <>
+          {loading && <CircularProgress />}
+          {error && <Alert severity="error">{error}</Alert>}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
+            {files.length === 0 && !loading && !error ? (
+              <Typography>No Google Photos found. Make sure you are connected.</Typography>
+            ) : (
+              files.map(photo => (
+                <Box key={photo.id} sx={{ width: 160, textAlign: 'center' }}>
+                  <a href={photo.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={photo.thumbnail}
+                      alt={photo.name}
+                      style={{ width: 150, height: 150, objectFit: 'cover', borderRadius: 8 }}
+                    />
+                  </a>
+                  <Typography variant="body2" noWrap>{photo.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {photo.createdTime ? new Date(photo.createdTime).toLocaleDateString() : ''}
+                  </Typography>
+                </Box>
+              ))
+            )}
+          </Box>
+        </>
+      ) : (
+        <FileBrowser
+          files={files}
+          onFolderClick={handleFolderClick}
+          onRefresh={handleRefresh}
+          breadcrumbs={allBreadcrumbs}
+          onBreadcrumbClick={handleBreadcrumbClick}
+          loading={loading}
+          error={error}
+          onFileClick={() => {}}
+          onAddFoldersToCompare={() => {}}
+          currentPath={currentFolder?.path || ''}
+          selectedFolders={selectedFolders}
+          onSelectFolder={handleSelectFolder}
+          searchTerm={searchTerm}
+        />
+      )}
     </Box>
   );
 };
